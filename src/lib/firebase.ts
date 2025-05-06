@@ -6,7 +6,7 @@ import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyD3U8gzNR9bxaX1MMrEw_vzsakSjcegO6A",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: "aetheria-8b412.firebaseapp.com",
   projectId: "aetheria-8b412",
   storageBucket: "aetheria-8b412.firebasestorage.app",
