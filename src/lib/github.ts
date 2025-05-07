@@ -51,7 +51,7 @@ export const getCommitHashes = async (githubUrl: string): Promise<CommitResponse
         }));
     } catch (error) {
         console.error("Error fetching commit hashes:", error);
-        throw new Error(`Failed to fetch commits: ${error.message}`);
+        throw new Error(`Failed to fetch commits: ${error}`);
     }
 };
 
