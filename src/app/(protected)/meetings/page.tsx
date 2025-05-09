@@ -31,7 +31,7 @@ const MeetingsPage = () => {
                 <div>
                     <div className='min-w-0'>
                         <div className='flex items-center gap-2'>
-                            <Link href={`/meetings/${meeting.id}`} className={`text-sm font-semibold`}>
+                            <Link href={`/meetings/${meeting.id}`} className='text-sm font-semibold'>
                             {meeting.name}
                             </Link>
                             {meeting.status === 'PROCESSING' && (
@@ -41,14 +41,14 @@ const MeetingsPage = () => {
                             )}
                         </div>
                     </div>
-                <div className='flex items-center text-xs text-gray-500 gap-x-2'>
-                    <p className='whitespace-nowrap'>
-                        {meeting.createdAt.toLocaleDateString()}
-                    </p>
-                    <p className='truncate'>
-                        {meeting.issues.length} issues
-                    </p>
-                </div>
+                    <div className='flex items-center text-xs text-gray-500 gap-x-2'>
+                        <p className='whitespace-nowrap'>
+                            {meeting.createdAt.toLocaleDateString()}
+                        </p>
+                        <p className='truncate'>
+                            {meeting.issues.length} issues
+                        </p>
+                    </div>
                 </div>
                 <div className='flex items-center flex-none gap-x-4'>
                     <Link href={`/meetings/${meeting.id}`}>

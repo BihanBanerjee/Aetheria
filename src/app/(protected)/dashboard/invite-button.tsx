@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 const InviteButton = () => {
     const { projectId } = useProject();
     const [open, setOpen] = useState(false)
-
+  
   return (
     <>
         <Dialog open={open} onOpenChange={setOpen}>

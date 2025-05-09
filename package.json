@@ -23,6 +23,7 @@
   "dependencies": {
     "@ai-sdk/google": "^1.2.14",
     "@clerk/nextjs": "^6.18.5",
+    "@clerk/themes": "^2.2.42",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.0.1",
     "@langchain/community": "^0.3.42",

@@ -1,6 +1,6 @@
 'use client'
 import useProject from '@/hooks/use-project';
-import { useUser } from '@clerk/nextjs'
+// import { useUser } from '@clerk/nextjs'
 import { ExternalLink, Github } from 'lucide-react';
 import Link from 'next/link';
 import React from 'react'
@@ -12,7 +12,7 @@ import InviteButton from './invite-button';
 import TeamMembers from './team-members';
 
 const DashboardPage = () => {
-    const { user } = useUser();
+    // const { user } = useUser();
     const { project } = useProject();
   return (
     <div>

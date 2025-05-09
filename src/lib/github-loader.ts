@@ -8,7 +8,7 @@ const getFileCount = async (path: string, octokit: Octokit, githubOwner: string,
     const { data } = await octokit.rest.repos.getContent({
         owner: githubOwner,
         repo: githubRepo,
-        path: path,
+        path
     });
     if(!Array.isArray(data) && data.type === 'file') {
         return acc + 1

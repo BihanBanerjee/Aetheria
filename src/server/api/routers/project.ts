@@ -23,7 +23,7 @@ export const projectRouter = createTRPCRouter({
             throw new Error('User not found')
         }
         const currentCredits = user.credits || 0
-        const fileCount = await checkCredits(input.githubUrl, input.githubToken)
+        const fileCount = await checkCredits(input.githubUrl, input.githubToken ?? '')
         if(currentCredits < fileCount) {
             throw new Error('Insufficient credits')
         }
@@ -198,7 +198,7 @@ export const projectRouter = createTRPCRouter({
         githubUrl: z.string(),
         githubToken: z.string().optional()
     })).mutation(async ({ctx, input}) => {
-        const fileCount = await checkCredits(input.githubUrl, input.githubToken)
+        const fileCount = await checkCredits(input.githubUrl, input.githubToken ?? '')
         const userCredits = await ctx.db.user.findUnique({
             where: {
                 id: ctx.user.userId!
