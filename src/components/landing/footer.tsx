@@ -11,7 +11,7 @@ export function Footer() {
         {/* Company Info */}
         <div>
           <div className="flex items-center mb-4">
-            <Image src="/logo.png" alt="Aetheria Logo" width={32} height={32} />
+            <Image src="/aetheria-logo.svg" alt="Aetheria Logo" width={32} height={32} />
             <span className="ml-3 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 bg-size-200 animate-gradient">
               Aetheria
             </span>

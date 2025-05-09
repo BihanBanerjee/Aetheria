@@ -1,0 +1,146 @@
+/* Glass morphism effect */
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+/* Fallback for browsers without backdrop-filter support */
+@supports not ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+  .glassmorphism {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Glass morphism with alternative approach for maximum compatibility */
+.glass-alt {
+  position: relative;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  overflow: hidden;
+}
+
+.glass-alt::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  background: inherit;
+  filter: blur(16px);
+  -webkit-filter: blur(16px);
+  z-index: -1;
+}
+
+/* Feature bubbles */
+.feature-bubble {
+  background-color: rgba(79, 70, 229, 0.3);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.feature-bubble:hover {
+  background-color: rgba(79, 70, 229, 0.5);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+.feature-bubble:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Color variations for feature bubbles */
+.feature-bubble.vector {
+  color: #F0ABFC; /* Light pink */
+  background-color: rgba(147, 51, 234, 0.3);
+}
+
+.feature-bubble.vector:hover {
+  background-color: rgba(147, 51, 234, 0.5);
+}
+
+.feature-bubble.commit {
+  color: #93C5FD; /* Light blue */
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.feature-bubble.commit:hover {
+  background-color: rgba(59, 130, 246, 0.5);
+}
+
+.feature-bubble.meeting {
+  color: #86EFAC; /* Light green */
+  background-color: rgba(16, 185, 129, 0.3);
+}
+
+.feature-bubble.meeting:hover {
+  background-color: rgba(16, 185, 129, 0.5);
+}
+
+/* Gradient text effect */
+.gradient-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: linear-gradient(90deg, 
+    #8b5cf6 0%, 
+    #a78bfa 15%, 
+    #93c5fd 30%, 
+    #60a5fa 45%, 
+    #8b5cf6 60%, 
+    #c4b5fd 75%, 
+    #8b5cf6 100%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: text-gradient 8s linear infinite, pulse 4s ease-in-out infinite;
+  transition: transform 0.3s ease;
+}
+
+.gradient-title:hover {
+  transform: scale(1.05);
+  letter-spacing: 0.6px;
+}
+
+/* Animated tagline with typewriter effect */
+.tech-tagline {
+  color: #93c5fd;
+  font-size: 0.875rem;
+  position: relative;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.tech-tagline::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background-color: #93c5fd;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.title-container:hover .tech-tagline::after {
+  opacity: 1;
+  animation: blink 1s step-end infinite;
+}
