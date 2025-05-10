@@ -1,6 +1,7 @@
+// src/app/(protected)/dashboard/meeting-card.tsx
 'use client'
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar'
-import { Card } from '@/components/ui/card'
+import 'react-circular-progressbar/dist/styles.css';
 import { useDropzone } from 'react-dropzone'
 import React from 'react'
 import { uploadFile } from '@/lib/firebase'
@@ -12,6 +13,8 @@ import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { api } from '@/trpc/react'
+import { GlassmorphicCard } from '@/components/ui/glassmorphic-card'
+import { motion } from 'framer-motion'
 
 const MeetingCard = () => {
     const { project } = useProject();
@@ -53,44 +56,67 @@ const MeetingCard = () => {
             })
             window.alert(downloadUrl)
             setIsUploading(false)
-
         }
     }) 
-  return (
-    <Card className='col-span-2 flex flex-col items-center justify-center p-10' {...getRootProps()}>
-        {
-        !isUploading && (
-            <>
-            <Presentation className='h-10 w-10 animate-bounce' />
-                <h3 className="mt-2 text-sm font-semibold text-gray-900">
-                    Create a new meeting 
-                </h3>
-                <p className='mt-1 text-center text-sm text-gray-500'>
-                    Analyse your meeting with Aetheria
-                    <br />
-                    Powered by AI.
-                </p>
-                <div className='mt-6'>
-                    <Button disabled={isUploading}>
+    
+    return (
+        <GlassmorphicCard 
+            className='col-span-2 flex flex-col items-center justify-center p-8 cursor-pointer border-dashed border-2 hover:border-indigo-400/50 transition-colors'
+            {...getRootProps()}
+        >
+            {!isUploading && (
+                <motion.div 
+                    className="flex flex-col items-center"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <div className="p-3 rounded-full bg-indigo-600/20 mb-3">
+                        <Presentation className='h-8 w-8 text-indigo-200 animate-pulse' />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                        Create a new meeting 
+                    </h3>
+                    <p className='text-center text-white/70 mb-4'>
+                        Analyze your meeting with Aetheria
+                        <br />
+                        Powered by AI.
+                    </p>
+                    <Button 
+                        disabled={isUploading}
+                        className="bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900"
+                    >
                         <Upload className='-ml-0.5 mr-1.5 h-5 w-5' aria-hidden='true'/>
                         Upload Meeting
                         <input className='hidden' {...getInputProps()} />
                     </Button>
-                </div>
-            </>
-        )}
-        {
-            isUploading && (
-                <div>
-                    <CircularProgressbar value={progress} text={`${progress}%`} className='size-20' styles={buildStyles({pathColor: '#3b82f6', textColor: '#3b82f6'})} />
-                    <p className='text-sm text-gray-500 text-center'>
+                </motion.div>
+            )}
+            {isUploading && (
+                <motion.div
+                    className="flex flex-col items-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <div style={{ width: 80, height: 80 }}>
+                        <CircularProgressbar 
+                            value={progress} 
+                            text={`${progress}%`} 
+                            styles={buildStyles({
+                                pathColor: '#818cf8',
+                                textColor: '#fff',
+                                trailColor: 'rgba(255, 255, 255, 0.2)'
+                            })} 
+                        />
+                    </div>
+                    <p className='text-sm text-white/80 text-center mt-3'>
                         Uploading your meeting...
                     </p>
-                </div>
-            )
-        }
-    </Card>
-  )
+                </motion.div>
+            )}
+        </GlassmorphicCard>
+    )
 }
 
 export default MeetingCard

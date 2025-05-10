@@ -1,3 +1,4 @@
+// src/app/(protected)/meetings/page.tsx
 'use client'
 import useProject from '@/hooks/use-project'
 import { api } from '@/trpc/react'
@@ -8,6 +9,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import useRefetch from '@/hooks/use-refetch'
+import { Calendar, Clock, Eye, Trash2, VideoIcon } from 'lucide-react'
+import { GlassmorphicCard, GlassmorphicCardTitle } from '@/components/ui/glassmorphic-card'
+import { motion } from 'framer-motion'
 
 const MeetingsPage = () => {
     const { projectId } = useProject()
@@ -16,60 +20,102 @@ const MeetingsPage = () => {
     })
     const deleteMeeting = api.project.deleteMeeting.useMutation()
     const refetch = useRefetch()
-  return (
-    <>
-    <MeetingCard />
-    <div className="h-6"></div>
-    <h1 className='text-xl font-semibold'>
-        Meetings
-    </h1>
-    {meetings && meetings.length === 0 && <div>No meetings found</div>}
-    {isLoading && <div>Loading...</div>}
-    <ul className='divide-y divide-gray-200'>
-        {meetings?.map(meeting => (
-            <li key={meeting.id} className='flex items-center justify-between py-5 gap-x-6'>
-                <div>
-                    <div className='min-w-0'>
-                        <div className='flex items-center gap-2'>
-                            <Link href={`/meetings/${meeting.id}`} className='text-sm font-semibold'>
-                            {meeting.name}
-                            </Link>
-                            {meeting.status === 'PROCESSING' && (
-                                <Badge className='bg-yellow-500 text-white'>
-                                    Processing...
-                                </Badge>
-                            )}
-                        </div>
-                    </div>
-                    <div className='flex items-center text-xs text-gray-500 gap-x-2'>
-                        <p className='whitespace-nowrap'>
-                            {meeting.createdAt.toLocaleDateString()}
-                        </p>
-                        <p className='truncate'>
-                            {meeting.issues.length} issues
-                        </p>
-                    </div>
+    
+    return (
+        <div className="text-white">
+            <MeetingCard />
+            <div className="h-10"></div>
+            <h1 className='text-2xl font-semibold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100'>
+                Your Meetings
+            </h1>
+            
+            {isLoading && (
+                <GlassmorphicCard className="p-8 text-center">
+                    <div className="animate-pulse">Loading meetings...</div>
+                </GlassmorphicCard>
+            )}
+            
+            {meetings && meetings.length === 0 && !isLoading && (
+                <GlassmorphicCard className="p-8 text-center">
+                    <VideoIcon className="h-12 w-12 mx-auto mb-3 text-white/40" />
+                    <p>No meetings found. Upload one to get started!</p>
+                </GlassmorphicCard>
+            )}
+            
+            {meetings && meetings.length > 0 && (
+                <div className="space-y-4">
+                    {meetings.map((meeting, index) => (
+                        <motion.div
+                            key={meeting.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                        >
+                            <GlassmorphicCard className="hover:bg-white/5 transition-colors">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="p-2 rounded-full bg-indigo-600/20">
+                                                <VideoIcon className='h-5 w-5 text-indigo-200' />
+                                            </div>
+                                            <GlassmorphicCardTitle className="text-xl">
+                                                {meeting.name}
+                                            </GlassmorphicCardTitle>
+                                            {meeting.status === 'PROCESSING' && (
+                                                <Badge className='bg-yellow-500/80 text-white'>
+                                                    Processing...
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <div className='flex items-center gap-4 text-sm text-white/60'>
+                                            <div className='flex items-center'>
+                                                <Calendar className="h-4 w-4 mr-1" />
+                                                {meeting.createdAt.toLocaleDateString()}
+                                            </div>
+                                            <div className='flex items-center'>
+                                                <Clock className="h-4 w-4 mr-1" />
+                                                {meeting.createdAt.toLocaleTimeString()}
+                                            </div>
+                                            <div>
+                                                {meeting.issues.length} issues identified
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className='flex items-center gap-3'>
+                                        <Link href={`/meetings/${meeting.id}`}>
+                                            <Button 
+                                                size='sm' 
+                                                variant='outline'
+                                                className="border-white/20 bg-white/10 text-white"
+                                            >
+                                                <Eye className="h-4 w-4 mr-1" />
+                                                View Details
+                                            </Button>
+                                        </Link>
+                                        <Button 
+                                            disabled={deleteMeeting.isPending} 
+                                            size='sm' 
+                                            variant='destructive'
+                                            className="bg-red-600/30 text-white hover:bg-red-600/50"
+                                            onClick={() => deleteMeeting.mutate({ meetingId: meeting.id }, {
+                                                onSuccess: () => {
+                                                    toast.success('Meeting deleted successfully')
+                                                    refetch()
+                                                }
+                                            })}
+                                        >
+                                            <Trash2 className="h-4 w-4 mr-1" />
+                                            Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                            </GlassmorphicCard>
+                        </motion.div>
+                    ))}
                 </div>
-                <div className='flex items-center flex-none gap-x-4'>
-                    <Link href={`/meetings/${meeting.id}`}>
-                    <Button size='sm' variant='outline'>
-                        View Meeting
-                    </Button>
-                    </Link>
-                    <Button disabled={deleteMeeting.isPending} size='sm' variant='destructive' onClick={() => deleteMeeting.mutate({ meetingId: meeting.id }, {
-                        onSuccess: () => {
-                            toast.success('Meeting deleted successfully')
-                            refetch()
-                        }
-                    })}>
-                        Delete Meeting
-                    </Button>
-                </div>
-            </li>
-        ))}
-    </ul>
-    </>
-  )
+            )}
+        </div>
+    )
 }
 
 export default MeetingsPage

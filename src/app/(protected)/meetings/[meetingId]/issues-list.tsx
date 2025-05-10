@@ -1,10 +1,12 @@
+// src/app/(protected)/meetings/[meetingId]/issues-list.tsx
 'use client'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api, type RouterOutputs } from '@/trpc/react'
-import { VideoIcon } from 'lucide-react'
+import { Clock, CornerDownRight, VideoIcon } from 'lucide-react'
 import React, { useState } from 'react'
+import { motion } from 'framer-motion'
+import { GlassmorphicCard, GlassmorphicCardContent, GlassmorphicCardHeader, GlassmorphicCardTitle } from '@/components/ui/glassmorphic-card'
 
 type Props = {
     meetingId: string
@@ -16,82 +18,111 @@ const IssuesList = ({ meetingId }: Props) => {
     }, {
         refetchInterval: 4000
     })
-    if(isLoading || !meeting) return <div>Loading...</div>
+    
+    if(isLoading || !meeting) {
+        return (
+            <div className="h-96 flex items-center justify-center">
+                <div className="glassmorphism border border-white/20 p-8 rounded-xl">
+                    <div className="animate-pulse text-white">Loading meeting details...</div>
+                </div>
+            </div>
+        );
+    }
+    
     return (
-        <>
-            <div className='p-8'>
-                <div className='mx-auto flex max-w-2xl items-center justify-between gap-x-8 border-b pb-6 lg:mx-0 lg:max-w-none'>
-                    <div className='flex items-center gap-x-6'>
-                        <div className='flex rounded-full border bg-white p-3'>
-                            <VideoIcon className='h-6 w-6' />
+        <div className='p-8 text-white'>
+            <div className='max-w-5xl mx-auto'>
+                <div className='glassmorphism border border-white/20 p-6 rounded-xl mb-10'>
+                    <div className='flex items-center gap-6'>
+                        <div className='flex rounded-full border border-indigo-400/30 bg-indigo-900/30 p-4'>
+                            <VideoIcon className='h-8 w-8 text-indigo-200' />
                         </div>
-                        <h1>
-                            <div className='text-sm leading-6 text-gray-600'>
-                                Meeting on {""}{meeting.createdAt.toLocaleDateString()}
-                            </div>
-                            <div className='mt-1 text-base font-semibold leading-6 text-gray-900'>
+                        <div>
+                            <h1 className='text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100'>
                                 {meeting.name}
+                            </h1>
+                            <div className='flex items-center gap-4 mt-1 text-white/60'>
+                                <div className="flex items-center">
+                                    <Clock className="h-4 w-4 mr-1" />
+                                    {meeting.createdAt.toLocaleDateString()}
+                                </div>
+                                <div>{meeting.issues.length} discussion points</div>
                             </div>
-                        </h1>
+                        </div>
                     </div>
                 </div>
 
-
-                <div className="h-4"></div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    {meeting.issues.map(issue => (
-                        <IssueCard key={issue.id} issue={issue} />
+                <h2 className="text-xl font-semibold mb-6 text-white">Discussion Points</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {meeting.issues.map((issue, index) => (
+                        <motion.div
+                            key={issue.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                        >
+                            <IssueCard issue={issue} />
+                        </motion.div>
                     ))}
                 </div>
             </div>
-        </>
+        </div>
     )
 }
 
 function IssueCard({ issue }: { issue: NonNullable<RouterOutputs["project"]["getMeetingById"]>["issues"][number]}) {
     const [open, setOpen] = useState(false)
+    
     return (
         <>
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent>
+                <DialogContent className="glassmorphism border border-white/20 text-white">
                     <DialogHeader>
-                        <DialogTitle>
+                        <DialogTitle className="text-xl bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100">
                             {issue.gist}
                         </DialogTitle>
-                        <DialogDescription>
-                            {issue.createdAt.toLocaleDateString()}
-                        </DialogDescription>
-                        <p className='text-gray-600'>
+                        <DialogDescription className="text-white/70">
                             {issue.headline}
-                        </p>
-                        <blockquote className='mt-2 border-l-4 border-gray-300 bg-gray-50 p-4'>
-                            <span className='text-sm text-gray-600'>
-                                {issue.start} - {issue.end}
-                            </span>
-                            <p className='font-medium italic leading-relaxed text-gray-900'>
-                                {issue.summary}
-                            </p>
-                        </blockquote>
+                        </DialogDescription>
                     </DialogHeader>
+                    
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                        <Clock className="h-4 w-4" />
+                        <span>{issue.start} - {issue.end}</span>
+                    </div>
+                    
+                    <div className="glassmorphism border border-white/20 p-4 mt-2 bg-indigo-900/20">
+                        <p className="italic text-white leading-relaxed">
+                            "{issue.summary}"
+                        </p>
+                    </div>
                 </DialogContent>
-
             </Dialog>
-            <Card className='relative'>
-                <CardHeader>
-                    <CardTitle className='text-xl'>
+            
+            <GlassmorphicCard className="h-full flex flex-col hover:bg-indigo-900/10 transition-colors cursor-pointer" onClick={() => setOpen(true)}>
+                <GlassmorphicCardHeader>
+                    <GlassmorphicCardTitle className="line-clamp-1">
                         {issue.gist}
-                    </CardTitle>
-                    <div className="border-b"></div>
-                    <CardDescription>
+                    </GlassmorphicCardTitle>
+                </GlassmorphicCardHeader>
+                <GlassmorphicCardContent className="flex-1">
+                    <p className="text-white/80 line-clamp-2 mb-4">
                         {issue.headline}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Button onClick={() => setOpen(true)}>
-                        Details
-                    </Button>
-                </CardContent>
-            </Card>
+                    </p>
+                    <div className="mt-auto">
+                        <Button 
+                            onClick={(e) => { 
+                                e.stopPropagation();
+                                setOpen(true);
+                            }}
+                            className="w-full bg-indigo-600/50 hover:bg-indigo-600/70"
+                        >
+                            <CornerDownRight className="h-4 w-4 mr-1" />
+                            View Details
+                        </Button>
+                    </div>
+                </GlassmorphicCardContent>
+            </GlassmorphicCard>
         </>
     )
 }

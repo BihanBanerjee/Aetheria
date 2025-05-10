@@ -67,7 +67,7 @@ function TestimonialCard({ name, role, testimonial, delay }: TestimonialCardProp
           <div className="flex items-center mb-6">
             <div className="h-12 w-12 rounded-full bg-gray-300 mr-4 relative overflow-hidden">
               <Image
-                src={`/api/placeholder/48/48?text=${name.charAt(0)}`} 
+                src="/SarahChen.png" 
                 alt={name}
                 fill
                 className="object-cover"
