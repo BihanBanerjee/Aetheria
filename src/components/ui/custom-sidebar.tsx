@@ -51,7 +51,7 @@ export function Sidebar({ children, className }: SidebarProps) {
   return (
     <aside 
       className={cn(
-        "glassmorphism fixed left-0 top-0 z-40 h-screen transition-all duration-300 border border-white/20 rounded-r-xl shadow-xl overflow-hidden",
+        "glassmorphism fixed left-0 top-0 z-40 h-full transition-all duration-300 border border-white/20 rounded-r-xl shadow-xl overflow-hidden",
         isExpanded ? "w-64" : "w-20",
         className
       )}

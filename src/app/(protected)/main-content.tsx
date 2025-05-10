@@ -13,14 +13,14 @@ export function MainContent({ children }: MainContentProps) {
   
   return (
     <main 
-      className={`relative flex-1 flex flex-col transition-all duration-300 ${
+      className={`relative flex-1 flex flex-col h-full transition-all duration-300 ${
         isExpanded 
           ? 'ml-64 w-[calc(100%-16rem)]' 
           : 'ml-20 w-[calc(100%-5rem)]'
       }`}
     >
-      {/* Use absolute positioning for the main container */}
-      <div className="absolute inset-0 flex flex-col p-3">
+      {/* Use flex column with flex-1 for the main container */}
+      <div className="flex flex-col h-full p-3">
         {/* Header - fixed height */}
         <div className='flex items-center gap-2 glassmorphism border border-white/20 rounded-xl p-2 px-4 shrink-0'>
           <div className="ml-auto flex items-center gap-2">
@@ -32,8 +32,8 @@ export function MainContent({ children }: MainContentProps) {
         {/* Fixed spacing */}
         <div className='h-4 shrink-0'></div>
         
-        {/* Main content area - fills remaining space */}
-        <div className='glassmorphism border border-white/20 rounded-xl overflow-y-auto flex-1 p-6 min-h-0'>
+        {/* Main content area - fills remaining space with flex-1 */}
+        <div className='glassmorphism border border-white/20 rounded-xl overflow-y-auto flex-1 p-6'>
           {children}
         </div>
       </div>

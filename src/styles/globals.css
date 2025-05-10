@@ -6,18 +6,12 @@
 @import "./animations.css";
 @import "./components.css";
 
-html, 
-body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
+html, body {
+  @apply h-full;
 }
 
-/* Next.js specific wrapper */
 #__next {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  @apply h-full flex flex-col;
 }
 
 @custom-variant dark (&:is(.dark *));

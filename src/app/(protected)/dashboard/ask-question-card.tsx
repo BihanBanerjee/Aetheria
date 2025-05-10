@@ -55,7 +55,7 @@ const AskQuestionCard = () => {
                 <DialogHeader>
                     <div className="flex items-center gap-2">
                         <DialogTitle className="flex items-center">
-                            <Image src="/logo.png" alt="aetheria" width={40} height={40} className="filter drop-shadow-lg" />
+                            <Image src="/aetheria-logo.svg" alt="aetheria" width={40} height={40} className="filter drop-shadow-lg" />
                             <span className="ml-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100">
                                 AI Response
                             </span>
