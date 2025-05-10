@@ -1,9 +1,7 @@
-// src/app/(protected)/layout.tsx
 import { SidebarProvider } from '@/components/ui/custom-sidebar'
-import { UserButton } from '@clerk/nextjs'
 import React from 'react'
 import { AppSidebar } from './dashboard/app-sidebar'
-import { MainContent } from './main-content'  // Moved to a separate file
+import { MainContent } from './main-content'
 
 type Props = {
     children: React.ReactNode
@@ -11,10 +9,10 @@ type Props = {
 
 const SidebarLayout = ({ children }: Props) => {
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900 overflow-hidden">
-      {/* Add animated particles background */}
+    <div className="h-full w-full bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900 overflow-hidden">
+      {/* Increased number of animated particles background */}
       <div className="fixed inset-0 pointer-events-none">
-        {Array.from({ length: 50 }).map((_, i) => (
+        {Array.from({ length: 150 }).map((_, i) => (
           <div 
             key={i}
             className="absolute rounded-full bg-white opacity-30"
@@ -30,8 +28,10 @@ const SidebarLayout = ({ children }: Props) => {
       </div>
       
       <SidebarProvider defaultExpanded={true}>
-        <AppSidebar />
-        <MainContent>{children}</MainContent>
+        <div className="h-full flex"> {/* Flex container for sidebar and main content */}
+          <AppSidebar />
+          <MainContent>{children}</MainContent>
+        </div>
       </SidebarProvider>
     </div>
   )

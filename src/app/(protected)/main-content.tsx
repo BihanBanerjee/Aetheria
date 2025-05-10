@@ -1,5 +1,4 @@
-// src/app/(protected)/main-content.tsx
-'use client'  // Important - this makes it a client component
+'use client'
 
 import { useSidebarContext } from '@/components/ui/custom-sidebar'
 import { UserButton } from '@clerk/nextjs'
@@ -14,22 +13,29 @@ export function MainContent({ children }: MainContentProps) {
   
   return (
     <main 
-      className={`transition-all duration-300 p-3 ${
+      className={`relative flex-1 flex flex-col transition-all duration-300 ${
         isExpanded 
           ? 'ml-64 w-[calc(100%-16rem)]' 
           : 'ml-20 w-[calc(100%-5rem)]'
       }`}
     >
-      <div className='flex items-center gap-2 glassmorphism border border-white/20 rounded-xl p-2 px-4'>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-white/70">Welcome to Aetheria</span>
-          <UserButton />
+      {/* Use absolute positioning for the main container */}
+      <div className="absolute inset-0 flex flex-col p-3">
+        {/* Header - fixed height */}
+        <div className='flex items-center gap-2 glassmorphism border border-white/20 rounded-xl p-2 px-4 shrink-0'>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-white/70">Welcome to Aetheria</span>
+            <UserButton />
+          </div>
         </div>
-      </div>
-      <div className='h-4'></div>
-      {/* main content */}
-      <div className='glassmorphism border border-white/20 rounded-xl overflow-y-auto h-[calc(100vh-6rem)] p-6'>
-        {children}
+        
+        {/* Fixed spacing */}
+        <div className='h-4 shrink-0'></div>
+        
+        {/* Main content area - fills remaining space */}
+        <div className='glassmorphism border border-white/20 rounded-xl overflow-y-auto flex-1 p-6 min-h-0'>
+          {children}
+        </div>
       </div>
     </main>
   );

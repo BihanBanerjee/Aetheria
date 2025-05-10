@@ -6,6 +6,20 @@
 @import "./animations.css";
 @import "./components.css";
 
+html, 
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Next.js specific wrapper */
+#__next {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {
