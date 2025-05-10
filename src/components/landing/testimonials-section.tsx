@@ -24,6 +24,7 @@ export function TestimonialsSection() {
       <div className="grid md:grid-cols-3 gap-8">
         <TestimonialCard
           name="Sarah Chen"
+          imageUrl="/team/sarah-chen.jpg"
           role="Lead Developer, TechStart"
           testimonial="Aetheria has cut our onboarding time by 60%. New developers can understand our codebase in days instead of weeks by simply asking questions."
           delay={0}
@@ -31,6 +32,7 @@ export function TestimonialsSection() {
         
         <TestimonialCard
           name="Marcus Johnson"
+          imageUrl="/team/marcus-johnson.jpg"
           role="CTO, CodeFlow"
           testimonial="The meeting summaries feature alone is worth the price. Getting AI-generated summaries of our technical discussions has transformed how we document decisions."
           delay={0.1}
@@ -38,6 +40,7 @@ export function TestimonialsSection() {
         
         <TestimonialCard
           name="Priya Sharma"
+          imageUrl="/team/priya-sharma.jpg" 
           role="Senior Engineer, DevMetrics"
           testimonial="The commit analysis gives us insights into our development patterns that we never had before. It's helping us improve our code quality and documentation."
           delay={0.2}
@@ -52,9 +55,10 @@ interface TestimonialCardProps {
   role: string;
   testimonial: string;
   delay: number;
+  imageUrl: string; // New prop for the image
 }
 
-function TestimonialCard({ name, role, testimonial, delay }: TestimonialCardProps) {
+function TestimonialCard({ name, role, testimonial, delay, imageUrl }: TestimonialCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -67,7 +71,7 @@ function TestimonialCard({ name, role, testimonial, delay }: TestimonialCardProp
           <div className="flex items-center mb-6">
             <div className="h-12 w-12 rounded-full bg-gray-300 mr-4 relative overflow-hidden">
               <Image
-                src="/SarahChen.png" 
+                src={imageUrl} 
                 alt={name}
                 fill
                 className="object-cover"
