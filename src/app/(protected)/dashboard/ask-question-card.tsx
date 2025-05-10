@@ -13,7 +13,7 @@ import CodeReferences from './code-references';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
 import useRefetch from '@/hooks/use-refetch';
-import { Bot, Save } from 'lucide-react';
+import { Bot, Save, X } from 'lucide-react';
 import { GlassmorphicCard, GlassmorphicCardHeader, GlassmorphicCardTitle, GlassmorphicCardContent } from '@/components/ui/glassmorphic-card';
 
 const AskQuestionCard = () => {
@@ -52,7 +52,8 @@ const AskQuestionCard = () => {
         <>
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className='sm:max-w-[80vw] max-h-[90vh] overflow-hidden flex flex-col glassmorphism border border-white/20'>
-                <DialogHeader>
+                
+                <DialogHeader className="pr-10"> {/* Add right padding to avoid overlap */}
                     <div className="flex items-center gap-2">
                         <DialogTitle className="flex items-center">
                             <Image src="/aetheria-logo.svg" alt="aetheria" width={40} height={40} className="filter drop-shadow-lg" />
@@ -87,17 +88,16 @@ const AskQuestionCard = () => {
                     </div>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-auto space-y-4 w-full pr-2">
+                <div className="flex-1 overflow-auto space-y-4 w-full pr-2 max-h-[70vh]">
                     <div className="w-full">
                         <MDEditor.Markdown 
                             source={answer} 
-                            className='w-full overflow-auto' 
+                            className='w-full overflow-auto custom-markdown' 
                             style={{ 
-                                maxHeight: '40vh', 
                                 backgroundColor: 'rgba(255, 255, 255, 0.05)', 
                                 color: 'white',
                                 borderRadius: '0.5rem',
-                                padding: '1rem'
+                                padding: '1rem',
                             }}
                         />
                     </div>

@@ -6,6 +6,7 @@
 @import "./animations.css";
 @import "./components.css";
 
+
 html, body {
   @apply h-full;
 }
@@ -67,3 +68,4 @@ html, body {
     @apply bg-background text-foreground;
   }
 }
+@import "./markdown-styles.css"

@@ -33,6 +33,7 @@ SyntaxHighlighter.registerLanguage('markdown', markdown);
 
 type Props = {
     filesReferences: {fileName: string; sourceCode: string; summary: string}[]
+    className?: string
 }
 
 // Keep your existing helper function
@@ -66,7 +67,40 @@ const getLanguageFromFileName = (fileName: string): string => {
     }
 };
 
-const CodeReferences = ({ filesReferences }: Props) => {
+// Custom styling for syntax highlighting to match your app's theme
+const customCodeStyle = {
+    ...atomOneDark,
+    hljs: {
+        ...atomOneDark.hljs,
+        background: 'transparent', // Make background transparent to let the container style show through
+    },
+    'hljs-keyword': {
+        ...atomOneDark['hljs-keyword'],
+        color: '#a78bfa', // Purple
+    },
+    'hljs-built_in': {
+        ...atomOneDark['hljs-built_in'],
+        color: '#a78bfa', // Purple
+    },
+    'hljs-title': {
+        ...atomOneDark['hljs-title'],
+        color: '#60a5fa', // Blue
+    },
+    'hljs-function': {
+        ...atomOneDark['hljs-function'],
+        color: '#60a5fa', // Blue
+    },
+    'hljs-string': {
+        ...atomOneDark['hljs-string'],
+        color: '#34d399', // Green
+    },
+    'hljs-number': {
+        ...atomOneDark['hljs-number'],
+        color: '#f9a8d4', // Pink
+    },
+};
+
+const CodeReferences = ({ filesReferences, className }: Props) => {
     const [tab, setTab] = React.useState(filesReferences[0]?.fileName || '');
     
     if (filesReferences.length === 0) {
@@ -75,17 +109,17 @@ const CodeReferences = ({ filesReferences }: Props) => {
     
     return (
         <motion.div 
-            className='w-full glassmorphism border border-white/20 p-4'
+            className={cn('w-full glassmorphism border border-white/20 p-4 h-full flex flex-col', className)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
         >
-            <h3 className="text-lg font-medium mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100">
+            <h3 className="text-lg font-medium mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100 flex-shrink-0">
                 Referenced Files
             </h3>
             
-            <Tabs value={tab} onValueChange={setTab}>
-                <div className='overflow-x-auto flex gap-2 bg-white/5 p-2 rounded-md backdrop-blur-sm'>
+            <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full">
+                <div className='overflow-x-auto flex gap-2 bg-white/5 p-2 rounded-md flex-shrink-0'>
                     {filesReferences.map((file, index) => (
                         <motion.button 
                             onClick={() => setTab(file.fileName)} 
@@ -104,42 +138,47 @@ const CodeReferences = ({ filesReferences }: Props) => {
                     ))}
                 </div>
                 
-                {filesReferences.map(file => (
-                    <TabsContent 
-                        key={file.fileName} 
-                        value={file.fileName} 
-                        className='w-full mt-2 border border-white/10 rounded-md overflow-hidden'
-                    >
-                        <div className="p-2 bg-black/30 text-white backdrop-blur-sm rounded-t-md flex justify-between items-center">
-                            <span>{file.fileName}</span>
-                            <span className="text-xs text-white/60 italic">Referenced by AI</span>
-                        </div>
-                        
-                        <div className="max-h-[40vh] overflow-auto">
-                            {file.sourceCode ? (
-                                <SyntaxHighlighter 
-                                    language={getLanguageFromFileName(file.fileName)}
-                                    style={atomOneDark}
-                                    showLineNumbers={true}
-                                    customStyle={{
-                                        margin: 0,
-                                        padding: '1rem',
-                                        borderRadius: '0 0 0.375rem 0.375rem',
-                                        fontSize: '0.9rem',
-                                        lineHeight: '1.5',
-                                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                                    }}
-                                >
-                                    {file.sourceCode.replace(/\\n/g, '\n')}
-                                </SyntaxHighlighter>
-                            ) : (
-                                <div className="p-4 bg-black/20 rounded-b-md text-white/70">
-                                    No code content available
-                                </div>
-                            )}
-                        </div>
-                    </TabsContent>
-                ))}
+                <div className="flex-1 overflow-hidden mt-2">
+                    {filesReferences.map(file => (
+                        <TabsContent 
+                            key={file.fileName} 
+                            value={file.fileName} 
+                            className='w-full h-full border border-white/10 rounded-md overflow-hidden'
+                        >
+                            <div className="p-2 bg-indigo-900/30 text-white rounded-t-md flex justify-between items-center flex-shrink-0">
+                                <span>{file.fileName}</span>
+                                <span className="text-xs text-white/60 italic">Referenced by AI</span>
+                            </div>
+                            
+                            <div className="flex-1 overflow-auto h-full bg-indigo-900/20">
+                                {file.sourceCode ? (
+                                    <SyntaxHighlighter 
+                                        language={getLanguageFromFileName(file.fileName)}
+                                        style={customCodeStyle}
+                                        showLineNumbers={true}
+                                        customStyle={{
+                                            margin: 0,
+                                            padding: '1rem',
+                                            borderRadius: '0 0 0.375rem 0.375rem',
+                                            fontSize: '0.9rem',
+                                            lineHeight: '1.5',
+                                            height: '100%',
+                                            maxHeight: 'none',
+                                            overflow: 'auto',
+                                            background: 'rgba(30, 41, 59, 0.7)', // More solid background with just subtle transparency
+                                        }}
+                                    >
+                                        {file.sourceCode.replace(/\\n/g, '\n')}
+                                    </SyntaxHighlighter>
+                                ) : (
+                                    <div className="p-4 bg-indigo-900/20 rounded-b-md text-white/70">
+                                        No code content available
+                                    </div>
+                                )}
+                            </div>
+                        </TabsContent>
+                    ))}
+                </div>
             </Tabs>
         </motion.div>
     );

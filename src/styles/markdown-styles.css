@@ -1,0 +1,197 @@
+/* Add this to globals.css or create a separate markdown-styles.css file and import it */
+
+/* Custom styling for the Markdown editor to match the indigo/purple/blue theme */
+.custom-markdown {
+  /* Overall text styling */
+  font-family: var(--font-sans);
+  line-height: 1.7;
+}
+
+/* Inline code styling - using indigo gradient background */
+.custom-markdown code {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.25) 0%, rgba(129, 140, 248, 0.25) 100%) !important;
+  color: #e2e8f0 !important; /* Brighter text */
+  padding: 0.2em 0.4em !important;
+  border-radius: 0.25rem !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 0.875em !important;
+  font-weight: 500 !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15) !important;
+}
+
+/* Code blocks with glassmorphic effect */
+.custom-markdown pre {
+  background: linear-gradient(135deg, rgba(67, 56, 202, 0.2) 0%, rgba(79, 70, 229, 0.15) 50%, rgba(99, 102, 241, 0.1) 100%) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-radius: 0.75rem !important;
+  padding: 1.25rem !important;
+  overflow: auto !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.1) !important;
+  margin: 1.5rem 0 !important;
+}
+
+.custom-markdown pre code {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Syntax highlighting adjustments */
+.custom-markdown pre .hljs-keyword,
+.custom-markdown pre .hljs-built_in {
+  color: #a78bfa !important; /* Purple */
+}
+
+.custom-markdown pre .hljs-title,
+.custom-markdown pre .hljs-function {
+  color: #60a5fa !important; /* Blue */
+}
+
+.custom-markdown pre .hljs-string {
+  color: #34d399 !important; /* Green */
+}
+
+.custom-markdown pre .hljs-number {
+  color: #f9a8d4 !important; /* Pink */
+}
+
+.custom-markdown pre .hljs-comment {
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-style: italic !important;
+}
+
+/* Headings with gradient text */
+.custom-markdown h1, 
+.custom-markdown h2, 
+.custom-markdown h3, 
+.custom-markdown h4, 
+.custom-markdown h5, 
+.custom-markdown h6 {
+  background: linear-gradient(90deg, #e2e8f0 0%, #a5b4fc 100%);
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.75em !important;
+  font-weight: 600 !important;
+}
+
+.custom-markdown h1 {
+  font-size: 1.875rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+  padding-bottom: 0.25rem !important;
+}
+
+.custom-markdown h2 {
+  font-size: 1.5rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  padding-bottom: 0.25rem !important;
+}
+
+.custom-markdown h3 {
+  font-size: 1.25rem !important;
+}
+
+/* Links */
+.custom-markdown a {
+  color: #93c5fd !important; /* Light blue */
+  text-decoration: none !important;
+  transition: all 0.15s ease !important;
+}
+
+.custom-markdown a:hover {
+  color: #60a5fa !important;
+  text-decoration: underline !important;
+}
+
+/* Lists */
+.custom-markdown ul, 
+.custom-markdown ol {
+  padding-left: 1.5rem !important;
+  margin: 1rem 0 !important;
+}
+
+.custom-markdown li {
+  margin: 0.25rem 0 !important;
+}
+
+/* Blockquotes with a subtle gradient */
+.custom-markdown blockquote {
+  border-left: 4px solid #818cf8 !important;
+  padding-left: 1rem !important;
+  margin-left: 0 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: linear-gradient(to right, rgba(99, 102, 241, 0.15) 0%, rgba(79, 70, 229, 0.05) 100%) !important;
+  padding: 0.75rem 1rem !important;
+  border-radius: 0 0.5rem 0.5rem 0 !important;
+  font-style: italic !important;
+}
+
+/* Tables */
+.custom-markdown table {
+  border-collapse: collapse !important;
+  width: 100% !important;
+  margin: 1rem 0 !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+}
+
+.custom-markdown th, 
+.custom-markdown td {
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  padding: 0.75rem 1rem !important;
+  text-align: left !important;
+}
+
+.custom-markdown th {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%) !important;
+  font-weight: 600 !important;
+  color: #e2e8f0 !important;
+}
+
+.custom-markdown tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Animation for spinner */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 2s linear infinite;
+}
+
+.animate-reverse {
+  animation-direction: reverse;
+}
+
+.animate-delay-150 {
+  animation-delay: 150ms;
+}
+
+.animate-delay-300 {
+  animation-delay: 300ms;
+}
