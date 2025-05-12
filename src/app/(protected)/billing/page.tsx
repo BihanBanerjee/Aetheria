@@ -5,15 +5,38 @@ import { Slider } from '@/components/ui/slider';
 import { createCheckOutSession } from '@/lib/stripe';
 import { api } from '@/trpc/react'
 import { CreditCard, Info } from 'lucide-react';
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion';
 import { GlassmorphicCard, GlassmorphicCardHeader, GlassmorphicCardTitle } from '@/components/ui/glassmorphic-card';
+import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+import useRefetch from '@/hooks/use-refetch';
 
 const BillingPage = () => {
+    const searchParams = useSearchParams();
+    const paymentStatus = searchParams.get('payment_status');
+    
     const { data: user } = api.project.getMyCredits.useQuery();
+    const refetch = useRefetch();
     const [creditsToBuy, setCreditsToBuy] = useState<number[]>([100])
     const creditsToBuyAmount = creditsToBuy[0]!
     const price = (creditsToBuyAmount / 50).toFixed(2);
+    
+    // Handle successful payment return
+    useEffect(() => {
+        if (paymentStatus === 'success') {
+            // Refetch user credits data
+            refetch();
+            
+            // Show success toast
+            toast.success('Payment successful');
+            
+            // Clean up URL (remove query parameter)
+            const url = new URL(window.location.href);
+            url.searchParams.delete('payment_status');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, [paymentStatus, refetch]);
 
     return (
         <div className="max-w-3xl mx-auto text-white">

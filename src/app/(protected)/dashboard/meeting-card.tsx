@@ -99,18 +99,56 @@ const MeetingCard = () => {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.3 }}
                 >
-                    <div style={{ width: 80, height: 80 }}>
+                    <div className="relative" style={{ width: 100, height: 100 }}>
+                        {/* Add a glowing background for the progress circle */}
+                        <div 
+                            className="absolute inset-0 rounded-full"
+                            style={{
+                                background: "radial-gradient(circle, rgba(99,102,241,0.3) 0%, rgba(79,70,229,0.1) 50%, rgba(0,0,0,0) 70%)",
+                                filter: "blur(5px)",
+                            }}
+                        />
+                        
+                        {/* Add a border around the progress to make it stand out */}
+                        <div className="absolute inset-[-4px] rounded-full border-2 border-indigo-500/30" />
+                        
+                        {/* Enhanced CircularProgressbar - strokeWidth is a direct prop, not part of buildStyles */}
                         <CircularProgressbar 
                             value={progress} 
                             text={`${progress}%`} 
+                            strokeWidth={8}
                             styles={buildStyles({
+                                // Make the path color more vibrant
                                 pathColor: '#818cf8',
-                                textColor: '#fff',
-                                trailColor: 'rgba(255, 255, 255, 0.2)'
-                            })} 
+                                
+                                // Make the trail more visible with higher opacity
+                                trailColor: 'rgba(255, 255, 255, 0.3)',
+                                
+                                // Add depth to the percentage number
+                                textColor: '#ffffff',
+                                
+                                // Smooth transitions
+                                pathTransitionDuration: 0.5,
+                            })}
                         />
+                        
+                        {/* Add an animated glow effect for visual engagement */}
+                        {progress > 0 && (
+                            <motion.div 
+                                className="absolute inset-[-10px] rounded-full border-2 border-indigo-500/20"
+                                animate={{ 
+                                    scale: [1, 1.1, 1],
+                                    opacity: [0.3, 0.6, 0.3]
+                                }}
+                                transition={{ 
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                }}
+                            />
+                        )}
                     </div>
-                    <p className='text-sm text-white/80 text-center mt-3'>
+                    <p className='text-sm text-white/80 text-center mt-4 font-medium'>
                         Uploading your meeting...
                     </p>
                 </motion.div>

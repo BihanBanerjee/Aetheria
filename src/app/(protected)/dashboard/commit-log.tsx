@@ -6,11 +6,18 @@ import { api } from "@/trpc/react";
 import { ExternalLink, GitCommit } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import CommitLoader from "./commit-loader";
 
 const CommitLog = () => {
     const { projectId, project } = useProject();
-    const {data: commits} = api.project.getCommits.useQuery({ projectId })
+    const { data: commits, isLoading } = api.project.getCommits.useQuery({ projectId });
 
+    // Show loader while commits are being fetched
+    if (isLoading) {
+        return <CommitLoader />;
+    }
+
+    // Show empty state if no commits are found
     if (!commits || commits.length === 0) {
         return (
             <div className="glassmorphism border border-white/20 rounded-xl p-8 text-center text-white/70">
@@ -22,7 +29,7 @@ const CommitLog = () => {
 
     return (
         <ul className="space-y-6">
-            {commits?.map((commit, commitIdx) => {
+            {commits.map((commit, commitIdx) => {
                 return (
                     <motion.li 
                         key={commit.id} 

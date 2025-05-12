@@ -7,6 +7,7 @@ import { Clock, CornerDownRight, VideoIcon } from 'lucide-react'
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { GlassmorphicCard, GlassmorphicCardContent, GlassmorphicCardHeader, GlassmorphicCardTitle } from '@/components/ui/glassmorphic-card'
+import MeetingDetailsLoader from '../meeting-details-loader'
 
 type Props = {
     meetingId: string
@@ -20,13 +21,7 @@ const IssuesList = ({ meetingId }: Props) => {
     })
     
     if(isLoading || !meeting) {
-        return (
-            <div className="h-96 flex items-center justify-center">
-                <div className="glassmorphism border border-white/20 p-8 rounded-xl">
-                    <div className="animate-pulse text-white">Loading meeting details...</div>
-                </div>
-            </div>
-        );
+        return <MeetingDetailsLoader />;
     }
     
     return (

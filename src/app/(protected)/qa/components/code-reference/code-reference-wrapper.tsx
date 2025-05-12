@@ -2,8 +2,8 @@
 'use client'
 
 import React, { useState, useMemo } from 'react';
-import { getLanguageFromFileName, cleanSourceCode } from './language-utils';
-import { SyntaxHighlighter, customCodeStyle } from './syntax-highlight-config';
+import { getLanguageFromFileName, cleanSourceCode } from '@/utils/code/language-utils';
+import { SyntaxHighlighter, customCodeStyle } from '@/utils/code/syntax-highlight-config';
 
 // Types
 interface FileReference {

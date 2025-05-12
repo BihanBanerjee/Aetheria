@@ -12,6 +12,7 @@ import useRefetch from '@/hooks/use-refetch'
 import { Calendar, Clock, Eye, Trash2, VideoIcon } from 'lucide-react'
 import { GlassmorphicCard, GlassmorphicCardTitle } from '@/components/ui/glassmorphic-card'
 import { motion } from 'framer-motion'
+import MeetingLoader from './meeting-loader'
 
 const MeetingsPage = () => {
     const { projectId } = useProject()
@@ -29,11 +30,7 @@ const MeetingsPage = () => {
                 Your Meetings
             </h1>
             
-            {isLoading && (
-                <GlassmorphicCard className="p-8 text-center">
-                    <div className="animate-pulse">Loading meetings...</div>
-                </GlassmorphicCard>
-            )}
+            {isLoading && <MeetingLoader />}
             
             {meetings && meetings.length === 0 && !isLoading && (
                 <GlassmorphicCard className="p-8 text-center">
@@ -62,9 +59,25 @@ const MeetingsPage = () => {
                                                 {meeting.name}
                                             </GlassmorphicCardTitle>
                                             {meeting.status === 'PROCESSING' && (
-                                                <Badge className='bg-yellow-500/80 text-white'>
-                                                    Processing...
-                                                </Badge>
+                                                <div className="relative inline-flex">
+                                                    {/* Outer glow effect */}
+                                                    <span className="absolute -inset-0.5 rounded-full bg-amber-400/20 blur-sm"></span>
+                                                    
+                                                    {/* Pulsing ring for extra visibility */}
+                                                    <span className="absolute -inset-1 rounded-full bg-amber-400/10 animate-ping opacity-75"></span>
+                                                    
+                                                    {/* Main badge with gradient background */}
+                                                    <Badge className="relative bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-medium px-3 py-1 border border-amber-400/50 shadow-md">
+                                                        <div className="flex items-center gap-1.5">
+                                                            {/* Animated dot indicator */}
+                                                            <span className="relative flex h-2 w-2">
+                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                                            </span>
+                                                            Processing
+                                                        </div>
+                                                    </Badge>
+                                                </div>
                                             )}
                                         </div>
                                         <div className='flex items-center gap-4 text-sm text-white/60'>

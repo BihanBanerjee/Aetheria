@@ -5,7 +5,7 @@ import React from 'react';
 import { FileText, Code } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import CodeReferenceWrapper from '../code-reference/code-reference-wrapper';
-import { cleanSourceCode } from '../code-reference/language-utils';
+import { cleanSourceCode } from '../../../../../utils/code/language-utils';
 
 // Types
 interface Question {

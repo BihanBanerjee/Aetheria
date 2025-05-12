@@ -13,7 +13,7 @@ import CodeReferences from './code-references';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
 import useRefetch from '@/hooks/use-refetch';
-import { Bot, Save, X } from 'lucide-react';
+import { Bot, Save  } from 'lucide-react';
 import { GlassmorphicCard, GlassmorphicCardHeader, GlassmorphicCardTitle, GlassmorphicCardContent } from '@/components/ui/glassmorphic-card';
 
 const AskQuestionCard = () => {
