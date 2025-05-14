@@ -15,9 +15,9 @@ type CommitResponse = {
     commitDate: string;
 };
 
-/**
- * Get commit hashes from a GitHub repository
- */
+
+// Get commit hashes from a GitHub repository
+
 export const getCommitHashes = async (githubUrl: string): Promise<CommitResponse[]> => {
     try {
         // Extract owner and repo from GitHub URL
@@ -55,9 +55,9 @@ export const getCommitHashes = async (githubUrl: string): Promise<CommitResponse
     }
 };
 
-/**
- * Poll commits for a project and process them
- */
+
+// Poll commits for a project and process them :->
+
 export const pollCommits = async (projectId: string) => {
     try {
         console.log(`Polling commits for project ${projectId}`);
@@ -183,9 +183,9 @@ export const pollCommits = async (projectId: string) => {
     }
 };
 
-/**
- * Fetch the diff for a specific commit
- */
+
+// Fetch the diff for a specific commit
+
 async function fetchCommitDiff(githubUrl: string, commitHash: string): Promise<string> {
     try {
         const { data } = await axios.get(`${githubUrl}/commit/${commitHash}.diff`, {
@@ -239,9 +239,9 @@ async function fetchCommitDiff(githubUrl: string, commitHash: string): Promise<s
     }
 }
 
-/**
- * Fetch project GitHub URL from database
- */
+
+//  Fetch project GitHub URL from database
+ 
 async function fetchProjectGithubUrl(projectId: string) {
     const project = await db.project.findUnique({
         where: { id: projectId },
@@ -257,9 +257,9 @@ async function fetchProjectGithubUrl(projectId: string) {
     return { githubUrl: project.githubUrl };
 }
 
-/**
- * Filter out commits that have already been processed
- */
+
+// Filter out commits that have already been processed
+
 async function filterUnprocessedCommits(projectId: string, commitHashes: CommitResponse[]) {
     const processedCommits = await db.commit.findMany({
         where: { projectId },
