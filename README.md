@@ -119,8 +119,8 @@ src/
 ## 📸 Screenshots
 
 <div align="center">
-  <img src="screenshots/dashboard.png" alt="Dashboard" width="45%" />
-  <img src="screenshots/qa-interface.png" alt="Q&A Interface" width="45%" />
+  <img src="/images/dashboard.png" alt="Dashboard" width="45%" />
+  <img src="/images/codeAnalysis.png" alt="Q&A Interface" width="45%" />
 </div>
 
 ## 🤝 Contributing
