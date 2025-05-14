@@ -4,6 +4,82 @@ import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+
+function ImageSlideshow() {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  
+  const slides = [
+    {
+      src: "/images/dashboard.png",
+      alt: "Aetheria Dashboard Interface",
+    },
+    {
+      src: "/images/codeAnalysis.png",
+      alt: "Code Analysis Feature",
+    },
+    {
+      src: "/images/codeAnalysis2.png",
+      alt: "Code Analysis Feature-2",
+    },
+    {
+      src: "/images/commitHistory.png",
+      alt: "Commit History View",
+    },
+    {
+      src: "/images/meetingAnalysis.png",
+      alt: "Meeting Summaries Feature",
+    },
+    {
+      src: "/images/billing.png",
+      alt: "Buy credits",
+    },
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [slides.length]);
+
+  return (
+    <div className="w-full h-full relative">
+      {slides.map((slide, index) => (
+        <div
+          key={index}
+          className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ${
+            index === currentSlide ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <Image
+            src={slide.src}
+            alt={slide.alt}
+            fill
+            className="object-contain"
+            priority={index === 0}
+            sizes="(max-width: 768px) 100vw, 50vw"
+          />
+        </div>
+      ))}
+      
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+        {slides.map((_, index) => (
+          <button
+            key={index}
+            onClick={() => setCurrentSlide(index)}
+            className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+              index === currentSlide 
+                ? "bg-white" 
+                : "bg-white/40 hover:bg-white/60"
+            }`}
+            aria-label={`Go to slide ${index + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function HeroSection() {
   return (
@@ -45,12 +121,7 @@ export function HeroSection() {
           className="repo-demo-container h-96 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl overflow-hidden"
         >
           <div className="h-full w-full relative">
-            <Image 
-              src="/api/placeholder/600/1200" 
-              alt="Aetheria Interface Demo" 
-              fill
-              className="object-cover repo-demo transition-transform duration-10000 hover:translate-y-[-88%]"
-            />
+            <ImageSlideshow />
           </div>
         </motion.div>
       </div>

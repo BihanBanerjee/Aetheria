@@ -30,9 +30,10 @@ export function CodeDemoSection() {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
+          className="h-full"
         >
-          <Card className="bg-white/10 backdrop-blur-lg border-white/20 rounded-xl overflow-hidden">
-            <CardContent className="p-6">
+          <Card className="bg-white/10 backdrop-blur-lg border-white/20 rounded-xl overflow-hidden h-full flex flex-col">
+            <CardContent className="p-6 flex-1 flex flex-col">
               <div className="flex items-center mb-4">
                 <div className="flex space-x-2">
                   <div className="h-3 w-3 rounded-full bg-red-500"></div>
@@ -41,7 +42,7 @@ export function CodeDemoSection() {
                 </div>
                 <div className="ml-4 text-sm text-white/70">Aetheria AI Response</div>
               </div>
-              <div className="bg-gray-900 rounded-lg p-4 h-80 overflow-y-auto">
+              <div className="bg-gray-900 rounded-lg p-4 flex-1 overflow-y-auto">
                 <CodeResponse />
               </div>
             </CardContent>

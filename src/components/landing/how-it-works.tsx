@@ -44,7 +44,7 @@ export function HowItWorksSection() {
       </div>
       
       {/* Demo Video */}
-      <motion.div 
+      {/* <motion.div 
         id="demo"
         className="mt-20 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-4 max-w-4xl mx-auto"
         initial={{ opacity: 0, y: 20 }}
@@ -67,7 +67,7 @@ export function HowItWorksSection() {
             </div>
           </div>
         </div>
-      </motion.div>
+      </motion.div> */}
     </section>
   );
 }
