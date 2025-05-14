@@ -80,7 +80,7 @@ cd aetheria
 bun install
 
 # Set up the database
-bunx prisma db psuh
+bun prisma db psuh
 
 # Run the development server
 bun dev
