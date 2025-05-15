@@ -33,6 +33,8 @@ const getFileCount = async (path: string, octokit: Octokit, githubOwner: string,
     }
     return acc
 }
+
+/*
 export const checkCredits = async (githubUrl: string, githubtoken: string) => {
     // find out how many files are in the repo
     const octokit = new Octokit({
@@ -47,6 +49,63 @@ export const checkCredits = async (githubUrl: string, githubtoken: string) => {
     
     const fileCount = await getFileCount("", octokit, githubOwner, githubRepo, 0);
     return fileCount
+}
+*/
+
+export const checkCredits = async (githubUrl: string, githubToken: string) => {
+    // find out how many files are in the repo
+    const octokit = new Octokit({
+        auth: githubToken || process.env.GITHUB_TOKEN, // Fall back to env if no user token.
+    })
+    const githubOwner = githubUrl.split("/")[3];
+    const githubRepo = githubUrl.split("/")[4];
+
+    if(!githubOwner || !githubRepo) {
+        return 0
+    }
+    
+    try {
+        // Get the default branch
+        const { data: repoData } = await octokit.rest.repos.get({
+            owner: githubOwner,
+            repo: githubRepo
+        });
+        
+        const defaultBranch = repoData.default_branch;
+        
+        // Get the commit SHA of the head of the default branch
+        const { data: refData } = await octokit.rest.git.getRef({
+            owner: githubOwner,
+            repo: githubRepo,
+            ref: `heads/${defaultBranch}`
+        });
+        
+        const commitSha = refData.object.sha;
+        
+        // Get the entire file tree in one request
+        const { data: treeData } = await octokit.rest.git.getTree({
+            owner: githubOwner,
+            repo: githubRepo,
+            tree_sha: commitSha,
+            recursive: '1'
+        });
+        
+        // Count only files (not directories)
+        const fileCount = treeData.tree.filter(item => item.type === 'blob').length;
+        
+        return fileCount;
+    } catch (error) {
+        console.error("Error counting files:", error);
+        // Fall back to the previous method if the Git Trees API fails
+        // (This could happen with very large repositories)
+        try {
+            console.log("Falling back to directory traversal method");
+            return await getFileCount("", octokit, githubOwner, githubRepo, 0);
+        } catch (fallbackError) {
+            console.error("Both file counting methods failed:", fallbackError);
+            throw error;
+        }
+    }
 }
 
 export const loadGithubRepo = async (githubUrl: string, githubToken?: string) => {
