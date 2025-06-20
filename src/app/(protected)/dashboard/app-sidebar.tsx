@@ -83,7 +83,7 @@ export function AppSidebar() {
                                         asChild
                                         active={pathname === item.url}
                                     >
-                                        <Link href={item.url} className="flex items-center">
+                                        <Link href={item.url} className="flex items-center w-full h-full">
                                             <item.icon className="mr-2 h-4 w-4" />
                                             {isExpanded && <span>{item.title}</span>}
                                         </Link>
@@ -103,14 +103,15 @@ export function AppSidebar() {
                                     <SidebarMenuButton 
                                         onClick={() => setProjectId(project.id)}
                                         active={project.id === projectId}
+                                        className="w-full h-full"
                                     >
-                                        <div className="flex items-center gap-2">
-                                            <div className={cn('rounded-sm border size-6 flex items-center justify-center text-sm bg-indigo-600/70 text-white', 
+                                        <div className="flex items-center gap-2 w-full h-full">
+                                            <div className={cn('rounded-sm border size-6 flex items-center justify-center text-sm bg-indigo-600/70 text-white flex-shrink-0', 
                                             {'bg-white/20 backdrop-blur-md text-white' : project.id === projectId})}>
                                                 {project.name[0]}
                                             </div>
                                             {isExpanded && (
-                                                <span>{project.name}</span>
+                                                <span className="flex-1 text-left truncate">{project.name}</span>
                                             )}
                                         </div>
                                     </SidebarMenuButton>
@@ -119,16 +120,18 @@ export function AppSidebar() {
                             
                             {isExpanded && (
                                 <SidebarMenuItem>
-                                    <Link href={'/create'} className="block mt-2">
-                                        <Button 
-                                          size='sm' 
-                                          variant='outline' 
-                                          className="w-fit border-white/20 bg-white/10 text-white hover:bg-white/20 transition-all"
-                                        > 
-                                            <Plus className="h-4 w-4 mr-1" /> 
-                                            Create Project
-                                        </Button>
-                                    </Link>
+                                    <SidebarMenuButton asChild className="w-full h-full">
+                                        <Link href={'/create'} className="w-full h-full flex items-center pl-1 pr-2 py-2">
+                                            <Button 
+                                              size='sm' 
+                                              variant='outline' 
+                                              className="w-full h-auto py-2 px-3 border-white/20 bg-white/10 text-white hover:bg-white/20 transition-all flex items-center justify-center gap-2"
+                                            > 
+                                                <Plus className="h-4 w-4" /> 
+                                                <span>Create Project</span>
+                                            </Button>
+                                        </Link>
+                                    </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
                         </SidebarMenu>

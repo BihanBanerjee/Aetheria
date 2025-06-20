@@ -190,7 +190,7 @@ export function SidebarMenuItem({ children, className }: SidebarMenuItemProps) {
   );
 }
 
-// Sidebar Menu Button
+// Sidebar Menu Button - Updated for full clickability
 interface SidebarMenuButtonProps {
   children: ReactNode;
   className?: string;
@@ -211,7 +211,7 @@ export function SidebarMenuButton({
   if (asChild) {
     return (
       <div className={cn(
-        "flex items-center rounded-md py-2 px-3 text-sm transition-colors",
+        "flex items-center rounded-md py-2 px-3 text-sm transition-colors w-full min-h-[2.25rem]",
         active ? "bg-white/20 text-white shadow-md" : "text-white/80 hover:bg-white/10 hover:text-white",
         isExpanded ? "" : "justify-center px-2",
         className
@@ -225,7 +225,7 @@ export function SidebarMenuButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center rounded-md py-2 px-3 text-sm transition-colors",
+        "flex w-full items-center rounded-md py-2 px-3 text-sm transition-colors min-h-[2.25rem]",
         active ? "bg-white/20 text-white shadow-md" : "text-white/80 hover:bg-white/10 hover:text-white",
         isExpanded ? "" : "justify-center px-2",
         className
