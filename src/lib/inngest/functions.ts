@@ -28,8 +28,8 @@ export const processProjectCreation = inngest.createFunction(
         return await db.project.update({
           where: { id: projectId },
           data: { 
-            // We'll add a status field to track progress
-            // For now, we'll use a JSON field to store status
+            status: 'INDEXING_REPO',
+            processedFiles: 0
           }
         });
       });
@@ -39,6 +39,16 @@ export const processProjectCreation = inngest.createFunction(
         console.log(`Starting to index repository for project ${projectId}`);
         const result = await indexGithubRepo(projectId, githubUrl, githubToken);
         console.log(`Successfully indexed ${result} files for project ${projectId}`);
+        
+        // Update progress
+        await db.project.update({
+          where: { id: projectId },
+          data: { 
+            status: 'POLLING_COMMITS',
+            processedFiles: result
+          }
+        });
+        
         return result;
       });
 
@@ -47,6 +57,15 @@ export const processProjectCreation = inngest.createFunction(
         console.log(`Starting to poll commits for project ${projectId}`);
         const result = await pollCommits(projectId);
         console.log(`Successfully processed ${result.count} commits for project ${projectId}`);
+        
+        // Update status
+        await db.project.update({
+          where: { id: projectId },
+          data: { 
+            status: 'DEDUCTING_CREDITS'
+          }
+        });
+        
         return result;
       });
 
@@ -69,7 +88,7 @@ export const processProjectCreation = inngest.createFunction(
         return await db.project.update({
           where: { id: projectId },
           data: {
-            // Mark as completed - we'll add a status field
+            status: 'COMPLETED'
           }
         });
       });
@@ -85,8 +104,7 @@ export const processProjectCreation = inngest.createFunction(
         return await db.project.update({
           where: { id: projectId },
           data: {
-            // Mark as failed
-            deletedAt: new Date() // For now, mark as deleted on failure
+            status: 'FAILED'
           }
         });
       });
@@ -96,5 +114,5 @@ export const processProjectCreation = inngest.createFunction(
   }
 );
 
-// Export all functions
-export const inngestFunctions = [processProjectCreation];
+// Export individual functions - this is the pattern Inngest expects
+export const functions = [processProjectCreation];
