@@ -74,6 +74,7 @@
     "framer-motion": "^12.10.5",
     "highlight.js": "^11.11.1",
     "ignore": "^7.0.4",
+    "inngest": "^3.39.2",
     "input-otp": "^1.4.2",
     "limiter": "^3.0.0",
     "lucide-react": "^0.507.0",

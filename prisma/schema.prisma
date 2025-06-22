@@ -27,6 +27,15 @@ model User {
   stripeTransactions StripeTransction[]
 }
 
+enum ProjectStatus {
+  INITIALIZING
+  INDEXING_REPO
+  POLLING_COMMITS
+  DEDUCTING_CREDITS
+  COMPLETED
+  FAILED
+}
+
 model Project {
   id           String    @id @default(cuid())
   createdAt    DateTime  @default(now())
@@ -34,6 +43,11 @@ model Project {
 
   name         String
   githubUrl    String
+
+  status       ProjectStatus @default(INITIALIZING)
+  processingLogs Json?        // Store processing logs as JSON
+  totalFiles   Int?          // Store total file count
+  processedFiles Int?        // Store processed file count
 
   deletedAt    DateTime?
   userToProjects UserToProject[]

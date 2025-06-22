@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure} from "../trpc";
 import { pollCommits } from "@/lib/github";
-import { checkCredits, indexGithubRepo } from "@/lib/github-loader";
+import { checkCredits } from "@/lib/github-loader";
+import { inngest } from "@/lib/inngest/client";
 
 export const projectRouter = createTRPCRouter({
     createProject: protectedProcedure.input(
@@ -18,41 +19,79 @@ export const projectRouter = createTRPCRouter({
             select: {
                 credits: true
             }
-        })
+        });
+
         if(!user) {
-            throw new Error('User not found')
+            throw new Error('User not found');
         }
-        const currentCredits = user.credits || 0
-        const fileCount = await checkCredits(input.githubUrl, input.githubToken ?? '')
+
+        const currentCredits = user.credits || 0;
+        const fileCount = await checkCredits(input.githubUrl, input.githubToken ?? '');
+        
         if(currentCredits < fileCount) {
-            throw new Error('Insufficient credits')
+            throw new Error('Insufficient credits');
         }
+
+        // Create project with initial status
         const project = await ctx.db.project.create({
             data: {
                 githubUrl: input.githubUrl,
                 name: input.name,
+                status: 'INITIALIZING',
+                totalFiles: fileCount,
+                processedFiles: 0,
+                processingLogs: {
+                    logs: [],
+                    startedAt: new Date().toISOString()
+                },
                 userToProjects: {
                     create: {
                         userId: ctx.user.userId!,
                     }
                 }
             }
-        })
-        await indexGithubRepo(project.id, input.githubUrl, input.githubToken)
-        await pollCommits(project.id)
-        await ctx.db.user.update({
-            where: {
-                id: ctx.user.userId!
-            },
+        });
+
+        // Trigger the background processing with Inngest
+        await inngest.send({
+            name: "project.creation.requested",
             data: {
-                credits: {
-                    decrement: fileCount
-                }
+                projectId: project.id,
+                githubUrl: input.githubUrl,
+                githubToken: input.githubToken,
+                userId: ctx.user.userId!,
+                fileCount
             }
-        })
-        return project
+        });
+
+        return project;
     }),
-    getProjects: protectedProcedure.query(async ({ctx}) => {
+
+    // Add new endpoint to get project status
+    getProjectStatus: protectedProcedure.input(
+        z.object({
+            projectId: z.string(),
+        })
+    ).query(async ({ctx, input}) => {
+        return await ctx.db.project.findUnique({
+            where: {
+                id: input.projectId
+            },
+            select: {
+                id: true,
+                name: true,
+                status: true,
+                totalFiles: true,
+                processedFiles: true,
+                processingLogs: true,
+                createdAt: true,
+                updatedAt: true
+            }
+        });
+    }),
+
+    // Get all projects with status for queue view
+    getProjectsWithStatus: protectedProcedure.query(async ({ctx}) => {
         const projects = await ctx.db.project.findMany({
             where: {
                 userToProjects: {
@@ -62,8 +101,34 @@ export const projectRouter = createTRPCRouter({
                 },
                 deletedAt: null
             },
-        })
-        return projects
+            select: {
+                id: true,
+                name: true,
+                status: true,
+                totalFiles: true,
+                processedFiles: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            orderBy: {
+                updatedAt: 'desc'
+            }
+        });
+        return projects;
+    }),
+    getProjects: protectedProcedure.query(async ({ctx}) => {
+        const projects = await ctx.db.project.findMany({
+            where: {
+                userToProjects: {
+                    some: {
+                        userId: ctx.user.userId!
+                    }
+                },
+                deletedAt: null,
+                status: 'COMPLETED' // Only show completed projects in main list
+            },
+        });
+        return projects;
     }),
     getCommits: protectedProcedure.input(
         z.object({

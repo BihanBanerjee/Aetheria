@@ -1,4 +1,5 @@
-// src/app/(protected)/dashboard/page.tsx
+// Update src/app/(protected)/dashboard/page.tsx
+
 'use client'
 import useProject from '@/hooks/use-project';
 import { ExternalLink, Github } from 'lucide-react';
@@ -8,18 +9,22 @@ import CommitLog from './commit-log';
 import AskQuestionCard from './ask-question-card';
 import MeetingCard from './meeting-card';
 import ArchiveButton from './archive-button';
-// import InviteButton from './invite-button';
-const InviteButton = dynamic(() => import('./invite-button'), {
-  ssr: false
-})
 import TeamMembers from './team-members';
 import { GlassmorphicCard } from '@/components/ui/glassmorphic-card';
 import dynamic from 'next/dynamic';
+import ProjectQueue from './project-queue'; // Add this import
+
+const InviteButton = dynamic(() => import('./invite-button'), {
+  ssr: false
+})
 
 const DashboardPage = () => {
     const { project } = useProject();
   return (
     <div className="text-white">
+      {/* Add the Project Queue at the top */}
+      <ProjectQueue />
+      
       <div className='flex items-center justify-between flex-wrap gap-y-4'>
         <GlassmorphicCard className='w-fit px-4 py-3 bg-indigo-900/40'>
           <div className="flex items-center">

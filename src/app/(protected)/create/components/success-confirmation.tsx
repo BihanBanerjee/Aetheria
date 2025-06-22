@@ -1,9 +1,10 @@
-// src/app/(protected)/create/components/success-confirmation.tsx
+// Update src/app/(protected)/create/components/success-confirmation.tsx
+
 'use client';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { GlassmorphicCard } from '@/components/ui/glassmorphic-card';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, ArrowRight, Clock } from 'lucide-react';
 
 interface SuccessConfirmationProps {
   onCreateAnother: () => void;
@@ -38,9 +39,28 @@ export const SuccessConfirmation: React.FC<SuccessConfirmationProps> = ({ onCrea
           Project Created Successfully!
         </h2>
         
-        <p className="text-white/80 mb-8">
-          Your project has been created and is being indexed. You can now start exploring and asking questions about your codebase.
-        </p>
+        <div className="mb-6">
+          <p className="text-white/80 mb-4">
+            Your project has been created and is now being processed in the background.
+          </p>
+          
+          <div className="glassmorphism border border-white/20 p-4 rounded-lg bg-blue-900/20 mb-4">
+            <div className="flex items-center gap-2 text-blue-200 mb-2">
+              <Clock className="h-4 w-4" />
+              <span className="font-medium">What&apos;s happening now:</span>
+            </div>
+            <ul className="text-sm text-white/70 space-y-1 text-left">
+              <li>• Indexing your repository files with AI</li>
+              <li>• Analyzing commit history</li>
+              <li>• Creating vector embeddings for search</li>
+              <li>• Setting up Q&A capabilities</li>
+            </ul>
+          </div>
+          
+          <p className="text-sm text-white/60">
+            You can monitor the progress in the dashboard. We&apos;ll notify you when everything is ready!
+          </p>
+        </div>
         
         <div className="flex gap-4 justify-center">
           <Button 
@@ -58,6 +78,7 @@ export const SuccessConfirmation: React.FC<SuccessConfirmationProps> = ({ onCrea
             className="bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 shadow-lg shadow-indigo-800/20"
           >
             Go to Dashboard
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
       </GlassmorphicCard>
