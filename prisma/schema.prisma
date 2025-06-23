@@ -29,6 +29,7 @@ model User {
 
 enum ProjectStatus {
   INITIALIZING
+  LOADING_REPO        // Add this new status
   INDEXING_REPO
   POLLING_COMMITS
   DEDUCTING_CREDITS
