@@ -20,10 +20,16 @@ export type MeetingStatus =
   | "COMPLETED"
   | "FAILED";
 
+// PROJECT CREATION with concurrency per user
 export const processProjectCreation = inngest.createFunction(
   { 
     id: "aetheria-process-project-creation",
-    name: "Aetheria: Process Project Creation"
+    name: "Aetheria: Process Project Creation",
+    retries: 1,
+    concurrency: {
+      limit: 2, // Allow max 2 projects per user simultaneously
+      key: "event.data.userId", // Key by userId to prevent one user from overloading
+    },
   },
   { event: "project.creation.requested" },
   async ({ event, step }) => {
@@ -52,72 +58,87 @@ export const processProjectCreation = inngest.createFunction(
         return docs;
       });
 
-      // Step 2: Process files in small batches (1-2 files per step)
-      const BATCH_SIZE = 2; // Smaller batches
+      // Step 2: Process files in concurrent batches
+      const BATCH_SIZE = 3; // Slightly larger batches since we have concurrency control
       const totalBatches = Math.ceil(docs.length / BATCH_SIZE);
       
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        await step.run(`process-batch-${batchIndex}`, async () => {
+      // Process multiple batches concurrently (but limited by concurrency settings)
+      const CONCURRENT_BATCHES = 3; // Process 3 batches at once
+      
+      for (let i = 0; i < totalBatches; i += CONCURRENT_BATCHES) {
+        const batchPromises = [];
+        
+        for (let j = 0; j < CONCURRENT_BATCHES && (i + j) < totalBatches; j++) {
+          const batchIndex = i + j;
           const startIndex = batchIndex * BATCH_SIZE;
           const endIndex = Math.min(startIndex + BATCH_SIZE, docs.length);
           const batch = docs.slice(startIndex, endIndex);
           
-          console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} files)`);
-          
-          const batchResults = await Promise.allSettled(batch.map(async (doc) => {
-            try {
-              const summary = await summariseCode(doc);
-              if (!summary || summary.trim() === "") {
-                console.warn(`Empty summary for ${doc.metadata.source}, skipping`);
-                return null;
-              }
+          batchPromises.push(
+            step.run(`process-batch-${batchIndex}`, async () => {
+              console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} files)`);
               
-              const embedding = await generateEmbedding(summary);
-              
-              // Save immediately to database
-              const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
-                data: {
-                  summary: summary,
-                  sourceCode: JSON.stringify(doc.pageContent),
-                  fileName: doc.metadata.source,
-                  projectId,
-                }
-              });
+              // Process files in this batch concurrently
+              const batchResults = await Promise.allSettled(batch.map(async (doc) => {
+                try {
+                  const summary = await summariseCode(doc);
+                  if (!summary || summary.trim() === "") {
+                    console.warn(`Empty summary for ${doc.metadata.source}, skipping`);
+                    return null;
+                  }
+                  
+                  const embedding = await generateEmbedding(summary);
+                  
+                  // Save immediately to database
+                  const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
+                    data: {
+                      summary: summary,
+                      sourceCode: JSON.stringify(doc.pageContent),
+                      fileName: doc.metadata.source,
+                      projectId,
+                    }
+                  });
 
-              await db.$executeRaw`
-                UPDATE "SourceCodeEmbedding"
-                SET "summaryEmbedding" = ${embedding}::vector
-                WHERE "id" = ${sourceCodeEmbedding.id}
-              `;
+                  await db.$executeRaw`
+                    UPDATE "SourceCodeEmbedding"
+                    SET "summaryEmbedding" = ${embedding}::vector
+                    WHERE "id" = ${sourceCodeEmbedding.id}
+                  `;
+                  
+                  console.log(`Saved embedding for ${doc.metadata.source}`);
+                  return { success: true, fileName: doc.metadata.source };
+                } catch (error) {
+                  console.error(`Error processing file ${doc.metadata.source}:`, error);
+                  return { success: false, fileName: doc.metadata.source, error: error.message };
+                }
+              }));
               
-              console.log(`Saved embedding for ${doc.metadata.source}`);
-              return { success: true, fileName: doc.metadata.source };
-            } catch (error) {
-              console.error(`Error processing file ${doc.metadata.source}:`, error);
-              return { success: false, fileName: doc.metadata.source, error: error.message };
-            }
-          }));
-          
-          // Update progress
-          const processedCount = startIndex + batch.length;
-          await db.project.update({
+              return {
+                batchIndex,
+                results: batchResults.length,
+                processedFiles: endIndex
+              };
+            })
+          );
+        }
+        
+        // Wait for all concurrent batches to complete
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Update progress after each set of concurrent batches
+        const maxProcessedFiles = Math.min((i + CONCURRENT_BATCHES) * BATCH_SIZE, docs.length);
+        await step.run(`update-progress-${i}`, async () => {
+          return await db.project.update({
             where: { id: projectId },
-            data: { processedFiles: processedCount }
+            data: { processedFiles: maxProcessedFiles }
           });
-          
-          // Small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          return {
-            batchIndex,
-            processedFiles: processedCount,
-            totalFiles: docs.length,
-            results: batchResults.length
-          };
         });
+        
+        // Small delay to avoid overwhelming the APIs
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // Step 3: Poll commits in smaller batches
+      // Step 3: Poll commits (can also be done concurrently with file processing)
       await step.run("poll-commits", async () => {
         console.log(`Starting to poll commits for project ${projectId}`);
         
@@ -126,7 +147,6 @@ export const processProjectCreation = inngest.createFunction(
           data: { status: 'POLLING_COMMITS' }
         });
         
-        // Use a modified pollCommits that processes smaller batches
         const result = await pollCommitsInBatches(projectId);
         console.log(`Successfully processed ${result.count} commits`);
         
@@ -179,39 +199,116 @@ export const processProjectCreation = inngest.createFunction(
   }
 );
 
-// New function for processing meetings
+// MEETING PROCESSING with concurrency per user
 export const processMeetingFunction = inngest.createFunction(
   {
     id: "aetheria-process-meeting",
-    name: "Aetheria: Process Meeting Recording"
+    name: "Aetheria: Process Meeting Recording",
+    retries: 1,
+    concurrency: {
+      limit: 3, // Allow max 3 meetings per user simultaneously
+      key: "event.data.userId", // Limit per user to prevent abuse
+    },
   },
   { event: "meeting.processing.requested" },
   async ({ event, step }) => {
-    const { meetingUrl, meetingId, projectId } = event.data;
+    const { meetingUrl, meetingId, projectId, userId } = event.data;
 
     try {
-      console.log(`Starting to process meeting ${meetingId}`);
+      console.log(`Starting to process meeting ${meetingId} for user ${userId}`);
 
-      // Step 1: Process the meeting audio
+      // Step 1: Validate and check user credits/limits
+      const validationResult = await step.run("validate-meeting", async () => {
+        const meeting = await db.meeting.findUnique({
+          where: { id: meetingId },
+          include: {
+            project: {
+              include: {
+                userToProjects: {
+                  where: { userId },
+                  select: { userId: true }
+                }
+              }
+            }
+          }
+        });
+
+        if (!meeting) {
+          throw new Error(`Meeting ${meetingId} not found`);
+        }
+
+        if (meeting.project.userToProjects.length === 0) {
+          throw new Error(`User ${userId} not authorized for meeting ${meetingId}`);
+        }
+
+        if (meeting.status !== 'PROCESSING') {
+          console.log(`Meeting ${meetingId} already processed with status: ${meeting.status}`);
+          return { alreadyProcessed: true };
+        }
+
+        console.log(`Meeting ${meetingId} validated, starting processing`);
+        return { alreadyProcessed: false };
+      });
+
+      if (validationResult.alreadyProcessed) {
+        return { success: true, message: "Meeting already processed" };
+      }
+
+      // Step 2: Process the meeting audio with timeout protection
       const meetingData = await step.run("process-meeting-audio", async () => {
-        console.log(`Processing audio for meeting ${meetingId}`);
+        console.log(`Processing audio for meeting ${meetingId} from URL: ${meetingUrl}`);
         
         try {
-          const { summaries } = await processMeeting(meetingUrl);
-          console.log(`Successfully processed ${summaries.length} discussion points`);
+          // Add a timeout wrapper around the AssemblyAI call
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('AssemblyAI processing timeout after 6 minutes')), 6 * 60 * 1000);
+          });
+
+          const processingPromise = processMeeting(meetingUrl);
+          
+          // Race between actual processing and timeout
+          const result = await Promise.race([processingPromise, timeoutPromise]);
+          
+          const { summaries } = result as { summaries: any[] };
+          
+          if (!summaries || summaries.length === 0) {
+            throw new Error('No summaries generated from audio processing');
+          }
+          
+          console.log(`Successfully processed ${summaries.length} discussion points for meeting ${meetingId}`);
           return summaries;
         } catch (error) {
-          console.error(`Error processing meeting audio:`, error);
-          throw new Error(`Failed to process meeting audio: ${error.message}`);
+          console.error(`Error processing meeting audio for ${meetingId}:`, error);
+          
+          // If AssemblyAI fails, create a fallback summary
+          const fallbackSummary = {
+            start: "00:00",
+            end: "00:00",
+            gist: "Meeting Processing Failed",
+            headline: "Unable to process audio",
+            summary: `Meeting audio could not be processed due to: ${error.message}. Please try re-uploading the meeting or contact support if the issue persists.`
+          };
+          
+          return [fallbackSummary];
         }
       });
 
-      // Step 2: Save issues to database
+      // Step 3: Save issues to database (can be done concurrently if we batch them)
       await step.run("save-meeting-issues", async () => {
-        console.log(`Saving ${meetingData.length} issues to database`);
+        console.log(`Saving ${meetingData.length} issues to database for meeting ${meetingId}`);
         
         try {
-          // Create all issues
+          // Check if issues already exist (in case of retry)
+          const existingIssues = await db.issue.findMany({
+            where: { meetingId }
+          });
+
+          if (existingIssues.length > 0) {
+            console.log(`Issues already exist for meeting ${meetingId}, skipping creation`);
+            return { savedIssues: existingIssues.length, skipped: true };
+          }
+
+          // Batch insert all issues at once (more efficient than individual inserts)
           await db.issue.createMany({
             data: meetingData.map(summary => ({
               start: summary.start,
@@ -223,15 +320,15 @@ export const processMeetingFunction = inngest.createFunction(
             }))
           });
 
-          console.log(`Successfully saved ${meetingData.length} issues`);
-          return { savedIssues: meetingData.length };
+          console.log(`Successfully saved ${meetingData.length} issues for meeting ${meetingId}`);
+          return { savedIssues: meetingData.length, skipped: false };
         } catch (error) {
-          console.error(`Error saving issues:`, error);
+          console.error(`Error saving issues for meeting ${meetingId}:`, error);
           throw new Error(`Failed to save issues: ${error.message}`);
         }
       });
 
-      // Step 3: Update meeting status and name
+      // Step 4: Update meeting status and name
       await step.run("update-meeting-status", async () => {
         console.log(`Updating meeting ${meetingId} status to COMPLETED`);
         
@@ -249,7 +346,7 @@ export const processMeetingFunction = inngest.createFunction(
           console.log(`Meeting ${meetingId} successfully completed with name: ${meetingName}`);
           return updatedMeeting;
         } catch (error) {
-          console.error(`Error updating meeting status:`, error);
+          console.error(`Error updating meeting status for ${meetingId}:`, error);
           throw new Error(`Failed to update meeting status: ${error.message}`);
         }
       });
@@ -265,12 +362,15 @@ export const processMeetingFunction = inngest.createFunction(
     } catch (error) {
       console.error(`Error processing meeting ${meetingId}:`, error);
       
-      // Mark meeting as failed
+      // Mark meeting as failed with detailed error info
       await step.run("mark-meeting-failed", async () => {
         try {
           return await db.meeting.update({
             where: { id: meetingId },
-            data: { status: 'COMPLETED' } // Keep as COMPLETED but with no issues
+            data: { 
+              status: 'COMPLETED', // Keep as COMPLETED but with error info in issues
+              name: `Processing Failed: ${error.message.substring(0, 50)}...`
+            }
           });
         } catch (dbError) {
           console.error(`Failed to update meeting status to failed:`, dbError);
@@ -283,9 +383,8 @@ export const processMeetingFunction = inngest.createFunction(
   }
 );
 
-// Helper function for processing commits in smaller batches
+// Helper function for processing commits in smaller batches with concurrency
 async function pollCommitsInBatches(projectId: string) {
-  // Get project GitHub URL
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: { githubUrl: true }
@@ -295,9 +394,7 @@ async function pollCommitsInBatches(projectId: string) {
     throw new Error(`Project ${projectId} has no GitHub URL`);
   }
   
-  // Import the functions we need
   const { getCommitHashes } = await import("@/lib/github");
-  
   const commitHashes = await getCommitHashes(project.githubUrl);
   
   // Filter unprocessed commits
@@ -313,51 +410,67 @@ async function pollCommitsInBatches(projectId: string) {
     return { count: 0 };
   }
   
-  // Process commits in very small batches
-  const COMMIT_BATCH_SIZE = 2;
+  // Process commits in concurrent batches
+  const COMMIT_BATCH_SIZE = 3; // Larger batches with concurrency
+  const CONCURRENT_COMMIT_BATCHES = 2; // Process 2 batches of commits simultaneously
   let totalProcessed = 0;
   
-  for (let i = 0; i < unprocessedCommits.length; i += COMMIT_BATCH_SIZE) {
-    const batch = unprocessedCommits.slice(i, i + COMMIT_BATCH_SIZE);
+  for (let i = 0; i < unprocessedCommits.length; i += (COMMIT_BATCH_SIZE * CONCURRENT_COMMIT_BATCHES)) {
+    const batchPromises = [];
     
-    // Process this batch with timeout protection
-    const batchResults = await Promise.allSettled(batch.map(async (commit) => {
-      try {
-        const { aisummariseCommit } = await import("@/lib/gemini");
-        const axios = (await import("axios")).default;
+    for (let j = 0; j < CONCURRENT_COMMIT_BATCHES; j++) {
+      const startIndex = i + (j * COMMIT_BATCH_SIZE);
+      const endIndex = Math.min(startIndex + COMMIT_BATCH_SIZE, unprocessedCommits.length);
+      
+      if (startIndex < unprocessedCommits.length) {
+        const batch = unprocessedCommits.slice(startIndex, endIndex);
         
-        // Get commit diff
-        const { data } = await axios.get(`${project.githubUrl}/commit/${commit.commitHash}.diff`, {
-          timeout: 10000
-        });
-        
-        const summary = await aisummariseCommit(data);
-        
-        return await db.commit.create({
-          data: {
-            projectId,
-            commitHash: commit.commitHash,
-            commitMessage: commit.commitMessage,
-            commitAuthorName: commit.commitAuthorName,
-            commitAuthorAvatar: commit.commitAuthorAvatar,
-            commitDate: commit.commitDate,
-            summary: summary || "Failed to generate summary"
-          }
-        });
-      } catch (error) {
-        console.error(`Error processing commit ${commit.commitHash}:`, error);
-        return null;
+        batchPromises.push(
+          Promise.allSettled(batch.map(async (commit) => {
+            try {
+              const { aisummariseCommit } = await import("@/lib/gemini");
+              const axios = (await import("axios")).default;
+              
+              // Get commit diff with timeout
+              const { data } = await axios.get(`${project.githubUrl}/commit/${commit.commitHash}.diff`, {
+                timeout: 10000
+              });
+              
+              const summary = await aisummariseCommit(data);
+              
+              return await db.commit.create({
+                data: {
+                  projectId,
+                  commitHash: commit.commitHash,
+                  commitMessage: commit.commitMessage,
+                  commitAuthorName: commit.commitAuthorName,
+                  commitAuthorAvatar: commit.commitAuthorAvatar,
+                  commitDate: commit.commitDate,
+                  summary: summary || "Failed to generate summary"
+                }
+              });
+            } catch (error) {
+              console.error(`Error processing commit ${commit.commitHash}:`, error);
+              return null;
+            }
+          }))
+        );
       }
-    }));
+    }
     
-    const successfulResults = batchResults
-      .filter(result => result.status === 'fulfilled' && result.value !== null)
-      .length;
+    // Wait for all concurrent batches to complete
+    const batchResults = await Promise.all(batchPromises);
     
-    totalProcessed += successfulResults;
+    // Count successful results
+    batchResults.forEach(batchResult => {
+      const successfulResults = batchResult
+        .filter(result => result.status === 'fulfilled' && result.value !== null)
+        .length;
+      totalProcessed += successfulResults;
+    });
     
-    // Add delay between commit batches
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Small delay between concurrent batch groups
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
   return { count: totalProcessed };

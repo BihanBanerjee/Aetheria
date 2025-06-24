@@ -39,17 +39,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({error: 'Meeting not found or unauthorized'}, {status: 404});
         }
 
-        // Trigger the background processing with Inngest
+        // Trigger the background processing with Inngest (now includes userId for concurrency)
         await inngest.send({
             name: "meeting.processing.requested",
             data: {
                 meetingUrl,
                 meetingId,
-                projectId
+                projectId,
+                userId // Add userId for concurrency control
             }
         });
 
-        console.log(`Meeting processing job queued for meeting ${meetingId}`);
+        console.log(`Meeting processing job queued for meeting ${meetingId} by user ${userId}`);
         
         return NextResponse.json({
             success: true, 
