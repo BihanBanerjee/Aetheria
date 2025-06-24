@@ -3,7 +3,7 @@ import { inngest } from "./client";
 import { indexGithubRepo, loadGithubRepo } from "@/lib/github-loader";
 import { pollCommits } from "@/lib/github";
 import { summariseCode, generateEmbedding } from "@/lib/gemini";
-import { processMeeting } from "@/lib/assembly";
+import { checkTranscriptionStatus, processMeeting, retrieveTranscriptionResults, submitMeetingForProcessing } from "@/lib/assembly";
 import { db } from "@/server/db";
 
 export type ProjectStatus = 
@@ -203,11 +203,11 @@ export const processProjectCreation = inngest.createFunction(
 export const processMeetingFunction = inngest.createFunction(
   {
     id: "aetheria-process-meeting",
-    name: "Aetheria: Process Meeting Recording",
+    name: "Aetheria: Process Meeting Recording", 
     retries: 1,
     concurrency: {
-      limit: 3, // Allow max 3 meetings per user simultaneously
-      key: "event.data.userId", // Limit per user to prevent abuse
+      limit: 3,
+      key: "event.data.userId",
     },
   },
   { event: "meeting.processing.requested" },
@@ -217,7 +217,7 @@ export const processMeetingFunction = inngest.createFunction(
     try {
       console.log(`Starting to process meeting ${meetingId} for user ${userId}`);
 
-      // Step 1: Validate and check user credits/limits
+      // Step 1: Validate meeting (< 10 seconds)
       const validationResult = await step.run("validate-meeting", async () => {
         const meeting = await db.meeting.findUnique({
           where: { id: meetingId },
@@ -254,33 +254,61 @@ export const processMeetingFunction = inngest.createFunction(
         return { success: true, message: "Meeting already processed" };
       }
 
-      // Step 2: Process the meeting audio with timeout protection
-      const meetingData = await step.run("process-meeting-audio", async () => {
-        console.log(`Processing audio for meeting ${meetingId} from URL: ${meetingUrl}`);
+      // Step 2: Submit transcription job (< 10 seconds)
+      const transcriptionJob = await step.run("submit-transcription", async () => {
+        console.log(`Submitting transcription job for meeting ${meetingId}`);
+        return await submitMeetingForProcessing(meetingUrl);
+      });
+
+      // Step 3: Poll for completion (each poll < 10 seconds)
+      let transcriptionStatus;
+      let pollAttempts = 0;
+      const maxPolls = 20; // Maximum 20 polls = ~10 minutes max wait time
+
+      do {
+        pollAttempts++;
+        
+        // Wait before polling (except first attempt)
+        if (pollAttempts > 1) {
+          await step.sleep("wait-before-poll", `${30}s`); // Wait 30 seconds between polls
+        }
+
+        transcriptionStatus = await step.run(`poll-transcription-${pollAttempts}`, async () => {
+          console.log(`Polling transcription status (attempt ${pollAttempts}/${maxPolls}) for meeting ${meetingId}`);
+          return await checkTranscriptionStatus(transcriptionJob.transcriptId);
+        });
+
+        console.log(`Poll ${pollAttempts}: Status = ${transcriptionStatus.status}`);
+
+        // Check for failure
+        if (transcriptionStatus.status === 'error') {
+          throw new Error(`Transcription failed: ${transcriptionStatus.error}`);
+        }
+
+        // Check for timeout
+        if (pollAttempts >= maxPolls && transcriptionStatus.status !== 'completed') {
+          throw new Error(`Transcription timeout after ${maxPolls} polling attempts`);
+        }
+
+      } while (transcriptionStatus.status !== 'completed');
+
+      // Step 4: Retrieve results (< 10 seconds)
+      const meetingData = await step.run("retrieve-transcription-results", async () => {
+        console.log(`Retrieving transcription results for meeting ${meetingId}`);
         
         try {
-          // Add a timeout wrapper around the AssemblyAI call
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('AssemblyAI processing timeout after 6 minutes')), 6 * 60 * 1000);
-          });
-
-          const processingPromise = processMeeting(meetingUrl);
+          const result = await retrieveTranscriptionResults(transcriptionJob.transcriptId);
           
-          // Race between actual processing and timeout
-          const result = await Promise.race([processingPromise, timeoutPromise]);
-          
-          const { summaries } = result as { summaries: any[] };
-          
-          if (!summaries || summaries.length === 0) {
-            throw new Error('No summaries generated from audio processing');
+          if (!result.summaries || result.summaries.length === 0) {
+            throw new Error('No summaries generated from transcription');
           }
           
-          console.log(`Successfully processed ${summaries.length} discussion points for meeting ${meetingId}`);
-          return summaries;
+          console.log(`Successfully retrieved ${result.summaries.length} discussion points for meeting ${meetingId}`);
+          return result.summaries;
         } catch (error) {
-          console.error(`Error processing meeting audio for ${meetingId}:`, error);
+          console.error(`Error retrieving transcription results for ${meetingId}:`, error);
           
-          // If AssemblyAI fails, create a fallback summary
+          // Create fallback summary
           const fallbackSummary = {
             start: "00:00",
             end: "00:00",
@@ -293,12 +321,12 @@ export const processMeetingFunction = inngest.createFunction(
         }
       });
 
-      // Step 3: Save issues to database (can be done concurrently if we batch them)
+      // Step 5: Save issues to database (< 10 seconds)
       await step.run("save-meeting-issues", async () => {
         console.log(`Saving ${meetingData.length} issues to database for meeting ${meetingId}`);
         
         try {
-          // Check if issues already exist (in case of retry)
+          // Check if issues already exist
           const existingIssues = await db.issue.findMany({
             where: { meetingId }
           });
@@ -308,7 +336,7 @@ export const processMeetingFunction = inngest.createFunction(
             return { savedIssues: existingIssues.length, skipped: true };
           }
 
-          // Batch insert all issues at once (more efficient than individual inserts)
+          // Batch insert all issues
           await db.issue.createMany({
             data: meetingData.map(summary => ({
               start: summary.start,
@@ -328,7 +356,7 @@ export const processMeetingFunction = inngest.createFunction(
         }
       });
 
-      // Step 4: Update meeting status and name
+      // Step 6: Update meeting status (< 5 seconds)
       await step.run("update-meeting-status", async () => {
         console.log(`Updating meeting ${meetingId} status to COMPLETED`);
         
