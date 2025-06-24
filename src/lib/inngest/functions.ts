@@ -20,15 +20,16 @@ export type MeetingStatus =
   | "COMPLETED"
   | "FAILED";
 
-// PROJECT CREATION with concurrency per user
+// Updated processProjectCreation with timeout-safe steps
+
 export const processProjectCreation = inngest.createFunction(
   { 
     id: "aetheria-process-project-creation",
     name: "Aetheria: Process Project Creation",
     retries: 1,
     concurrency: {
-      limit: 2, // Allow max 2 projects per user simultaneously
-      key: "event.data.userId", // Key by userId to prevent one user from overloading
+      limit: 2,
+      key: "event.data.userId",
     },
   },
   { event: "project.creation.requested" },
@@ -36,7 +37,7 @@ export const processProjectCreation = inngest.createFunction(
     const { projectId, githubUrl, githubToken, userId, fileCount } = event.data;
 
     try {
-      // Step 1: Load repository files
+      // Step 1: Load repository files (< 30 seconds - just fetching file list)
       const docs = await step.run("load-github-repo", async () => {
         await db.project.update({
           where: { id: projectId },
@@ -58,105 +59,174 @@ export const processProjectCreation = inngest.createFunction(
         return docs;
       });
 
-      // Step 2: Process files in concurrent batches
-      const BATCH_SIZE = 3; // Slightly larger batches since we have concurrency control
-      const totalBatches = Math.ceil(docs.length / BATCH_SIZE);
+      // Step 2: Process files in SMALL batches to stay under 60 seconds
+      const SMALL_BATCH_SIZE = 2; // Process only 2 files per step (30 seconds each max)
+      const totalBatches = Math.ceil(docs.length / SMALL_BATCH_SIZE);
       
-      // Process multiple batches concurrently (but limited by concurrency settings)
-      const CONCURRENT_BATCHES = 3; // Process 3 batches at once
-      
-      for (let i = 0; i < totalBatches; i += CONCURRENT_BATCHES) {
-        const batchPromises = [];
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * SMALL_BATCH_SIZE;
+        const endIndex = Math.min(startIndex + SMALL_BATCH_SIZE, docs.length);
+        const batch = docs.slice(startIndex, endIndex);
         
-        for (let j = 0; j < CONCURRENT_BATCHES && (i + j) < totalBatches; j++) {
-          const batchIndex = i + j;
-          const startIndex = batchIndex * BATCH_SIZE;
-          const endIndex = Math.min(startIndex + BATCH_SIZE, docs.length);
-          const batch = docs.slice(startIndex, endIndex);
+        await step.run(`process-file-batch-${batchIndex}`, async () => {
+          console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} files)`);
           
-          batchPromises.push(
-            step.run(`process-batch-${batchIndex}`, async () => {
-              console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} files)`);
+          // Process each file in the small batch
+          for (const doc of batch) {
+            try {
+              console.log(`Processing file: ${doc.metadata.source}`);
               
-              // Process files in this batch concurrently
-              const batchResults = await Promise.allSettled(batch.map(async (doc) => {
-                try {
-                  const summary = await summariseCode(doc);
-                  if (!summary || summary.trim() === "") {
-                    console.warn(`Empty summary for ${doc.metadata.source}, skipping`);
-                    return null;
-                  }
-                  
-                  const embedding = await generateEmbedding(summary);
-                  
-                  // Save immediately to database
-                  const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
-                    data: {
-                      summary: summary,
-                      sourceCode: JSON.stringify(doc.pageContent),
-                      fileName: doc.metadata.source,
-                      projectId,
-                    }
-                  });
-
-                  await db.$executeRaw`
-                    UPDATE "SourceCodeEmbedding"
-                    SET "summaryEmbedding" = ${embedding}::vector
-                    WHERE "id" = ${sourceCodeEmbedding.id}
-                  `;
-                  
-                  console.log(`Saved embedding for ${doc.metadata.source}`);
-                  return { success: true, fileName: doc.metadata.source };
-                } catch (error) {
-                  console.error(`Error processing file ${doc.metadata.source}:`, error);
-                  return { success: false, fileName: doc.metadata.source, error: error.message };
+              // Single file processing (should be < 30 seconds)
+              const summary = await summariseCode(doc);
+              if (!summary || summary.trim() === "") {
+                console.warn(`Empty summary for ${doc.metadata.source}, skipping`);
+                continue;
+              }
+              
+              const embedding = await generateEmbedding(summary);
+              
+              // Save immediately
+              const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
+                data: {
+                  summary: summary,
+                  sourceCode: JSON.stringify(doc.pageContent),
+                  fileName: doc.metadata.source,
+                  projectId,
                 }
-              }));
+              });
+
+              await db.$executeRaw`
+                UPDATE "SourceCodeEmbedding"
+                SET "summaryEmbedding" = ${embedding}::vector
+                WHERE "id" = ${sourceCodeEmbedding.id}
+              `;
               
-              return {
-                batchIndex,
-                results: batchResults.length,
-                processedFiles: endIndex
-              };
-            })
-          );
-        }
-        
-        // Wait for all concurrent batches to complete
-        const batchResults = await Promise.allSettled(batchPromises);
-        
-        // Update progress after each set of concurrent batches
-        const maxProcessedFiles = Math.min((i + CONCURRENT_BATCHES) * BATCH_SIZE, docs.length);
-        await step.run(`update-progress-${i}`, async () => {
-          return await db.project.update({
+              console.log(`✅ Processed: ${doc.metadata.source}`);
+            } catch (error) {
+              console.error(`❌ Error processing ${doc.metadata.source}:`, error);
+              // Continue with next file instead of failing entire batch
+            }
+          }
+          
+          // Update progress after each batch
+          await db.project.update({
             where: { id: projectId },
-            data: { processedFiles: maxProcessedFiles }
+            data: { processedFiles: endIndex }
           });
+          
+          return { batchIndex, processedFiles: endIndex };
         });
         
-        // Small delay to avoid overwhelming the APIs
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Small delay between batches to avoid overwhelming APIs
+        if (batchIndex < totalBatches - 1) {
+          await step.sleep("batch-delay", "2s");
+        }
       }
 
-      // Step 3: Poll commits (can also be done concurrently with file processing)
-      await step.run("poll-commits", async () => {
-        console.log(`Starting to poll commits for project ${projectId}`);
-        
+      // Step 3: Process commits in small batches (< 60 seconds per batch)
+      await step.run("start-commit-processing", async () => {
         await db.project.update({
           where: { id: projectId },
           data: { status: 'POLLING_COMMITS' }
         });
-        
-        const result = await pollCommitsInBatches(projectId);
-        console.log(`Successfully processed ${result.count} commits`);
-        
-        return result;
+        return { message: "Starting commit processing" };
       });
 
-      // Step 4: Deduct credits
-      await step.run("deduct-credits", async () => {
-        console.log(`Deducting ${fileCount} credits from user ${userId}`);
+      // Get commits and process in safe batches
+      const commitData = await step.run("get-commit-list", async () => {
+        const project = await db.project.findUnique({
+          where: { id: projectId },
+          select: { githubUrl: true }
+        });
         
+        if (!project?.githubUrl) {
+          throw new Error(`Project ${projectId} has no GitHub URL`);
+        }
+        
+        const { getCommitHashes } = await import("@/lib/github");
+        const commitHashes = await getCommitHashes(project.githubUrl);
+        
+        // Filter unprocessed commits
+        const processedCommits = await db.commit.findMany({
+          where: { projectId },
+          select: { commitHash: true }
+        });
+        
+        const processedHashes = new Set(processedCommits.map(commit => commit.commitHash));
+        const unprocessedCommits = commitHashes.filter(commit => !processedHashes.has(commit.commitHash));
+        
+        return { unprocessedCommits, githubUrl: project.githubUrl };
+      });
+
+      // Process commits in small batches (1-2 commits per step to stay under 60s)
+      const COMMIT_BATCH_SIZE = 1; // Process 1 commit per step for safety
+      const commitBatches = Math.ceil(commitData.unprocessedCommits.length / COMMIT_BATCH_SIZE);
+      
+      for (let i = 0; i < commitBatches; i++) {
+        const startIdx = i * COMMIT_BATCH_SIZE;
+        const endIdx = Math.min(startIdx + COMMIT_BATCH_SIZE, commitData.unprocessedCommits.length);
+        const commitBatch = commitData.unprocessedCommits.slice(startIdx, endIdx);
+        
+        if (commitBatch.length === 0) break;
+        
+        await step.run(`process-commits-${i}`, async () => {
+          console.log(`Processing commit batch ${i + 1}/${commitBatches}`);
+          
+          for (const commit of commitBatch) {
+            try {
+              // Get commit diff (should be < 10 seconds)
+              const axios = (await import("axios")).default;
+              const { data: diffData } = await axios.get(
+                `${commitData.githubUrl}/commit/${commit.commitHash}.diff`, 
+                { timeout: 10000 }
+              );
+              
+              // Summarize diff (should be < 30 seconds)
+              const { aisummariseCommit } = await import("@/lib/gemini");
+              const summary = await aisummariseCommit(diffData);
+              
+              // Save to database (< 5 seconds)
+              await db.commit.create({
+                data: {
+                  projectId,
+                  commitHash: commit.commitHash,
+                  commitMessage: commit.commitMessage,
+                  commitAuthorName: commit.commitAuthorName,
+                  commitAuthorAvatar: commit.commitAuthorAvatar,
+                  commitDate: commit.commitDate,
+                  summary: summary || "Failed to generate summary"
+                }
+              });
+              
+              console.log(`✅ Processed commit: ${commit.commitHash.substring(0, 8)}`);
+            } catch (error) {
+              console.error(`❌ Error processing commit ${commit.commitHash}:`, error);
+              // Create a basic record even if processing fails
+              await db.commit.create({
+                data: {
+                  projectId,
+                  commitHash: commit.commitHash,
+                  commitMessage: commit.commitMessage,
+                  commitAuthorName: commit.commitAuthorName,
+                  commitAuthorAvatar: commit.commitAuthorAvatar,
+                  commitDate: commit.commitDate,
+                  summary: "Processing failed"
+                }
+              }).catch(() => {}); // Ignore if already exists
+            }
+          }
+          
+          return { processedCommits: commitBatch.length };
+        });
+        
+        // Small delay between commit batches
+        if (i < commitBatches - 1) {
+          await step.sleep("commit-batch-delay", "1s");
+        }
+      }
+
+      // Step 4: Deduct credits (< 5 seconds)
+      await step.run("deduct-credits", async () => {
         await db.project.update({
           where: { id: projectId },
           data: { status: 'DEDUCTING_CREDITS' }
@@ -172,20 +242,19 @@ export const processProjectCreation = inngest.createFunction(
         });
       });
 
-      // Step 5: Mark as completed
+      // Step 5: Mark as completed (< 5 seconds)
       await step.run("mark-completed", async () => {
-        console.log(`Project ${projectId} processing completed successfully`);
         return await db.project.update({
           where: { id: projectId },
           data: { status: 'COMPLETED' }
         });
       });
 
-      console.log(`Project ${projectId} fully processed and ready!`);
+      console.log(`✅ Project ${projectId} fully processed!`);
       return { success: true, projectId, indexedFiles: docs.length };
 
     } catch (error) {
-      console.error(`Error processing project ${projectId}:`, error);
+      console.error(`❌ Error processing project ${projectId}:`, error);
       
       await step.run("mark-failed", async () => {
         return await db.project.update({
@@ -196,6 +265,131 @@ export const processProjectCreation = inngest.createFunction(
 
       throw error;
     }
+  }
+);
+
+// Alternative: Even more granular file processing
+export const processProjectCreationUltraSafe = inngest.createFunction(
+  { 
+    id: "aetheria-process-project-creation-ultra-safe",
+    name: "Aetheria: Ultra-Safe Project Creation",
+    retries: 1,
+    concurrency: {
+      limit: 2,
+      key: "event.data.userId",
+    },
+  },
+  { event: "project.creation.requested.ultra-safe" },
+  async ({ event, step }) => {
+    const { projectId, githubUrl, githubToken, userId, fileCount } = event.data;
+
+    try {
+      // Step 1: Load and queue individual files
+      const docs = await step.run("load-and-queue-files", async () => {
+        const docs = await loadGithubRepo(githubUrl, githubToken);
+        
+        // Queue each file for individual processing
+        for (let i = 0; i < docs.length; i++) {
+          await inngest.send({
+            name: "project.file.process.requested",
+            data: {
+              projectId,
+              fileIndex: i,
+              fileName: docs[i].metadata.source,
+              fileContent: docs[i].pageContent,
+              totalFiles: docs.length
+            }
+          });
+        }
+        
+        return { totalFiles: docs.length };
+      });
+
+      // The individual file processing would be handled by separate functions
+      // that process ONE file at a time, guaranteeing < 60 second execution
+      
+      return { success: true, queuedFiles: docs.totalFiles };
+      
+    } catch (error) {
+      console.error(`Error queuing project files:`, error);
+      throw error;
+    }
+  }
+);
+
+// Separate function to process individual files (guaranteed < 60 seconds)
+export const processSingleFile = inngest.createFunction(
+  {
+    id: "aetheria-process-single-file",
+    name: "Process Single File",
+    concurrency: {
+      limit: 5, // Process up to 5 files simultaneously
+      key: "event.data.projectId"
+    }
+  },
+  { event: "project.file.process.requested" },
+  async ({ event, step }) => {
+    const { projectId, fileIndex, fileName, fileContent, totalFiles } = event.data;
+
+    await step.run("process-single-file", async () => {
+      try {
+        // Create document object
+        const doc = {
+          pageContent: fileContent,
+          metadata: { source: fileName }
+        };
+
+        // Process single file (should be < 45 seconds)
+        const summary = await summariseCode(doc);
+        if (!summary || summary.trim() === "") {
+          console.warn(`Empty summary for ${fileName}, skipping`);
+          return;
+        }
+        
+        const embedding = await generateEmbedding(summary);
+        
+        // Save to database
+        const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
+          data: {
+            summary,
+            sourceCode: JSON.stringify(fileContent),
+            fileName,
+            projectId,
+          }
+        });
+
+        await db.$executeRaw`
+          UPDATE "SourceCodeEmbedding"
+          SET "summaryEmbedding" = ${embedding}::vector
+          WHERE "id" = ${sourceCodeEmbedding.id}
+        `;
+
+        // Update progress
+        const updatedProject = await db.project.update({
+          where: { id: projectId },
+          data: { 
+            processedFiles: { increment: 1 }
+          },
+          select: { processedFiles: true }
+        });
+
+        console.log(`✅ Processed file ${fileIndex + 1}/${totalFiles}: ${fileName}`);
+        
+        // Check if this was the last file
+        if (updatedProject.processedFiles >= totalFiles) {
+          // Trigger next phase (commit processing)
+          await inngest.send({
+            name: "project.files.completed",
+            data: { projectId }
+          });
+        }
+
+        return { success: true, fileName };
+      } catch (error) {
+        console.error(`Error processing file ${fileName}:`, error);
+        return { success: false, fileName, error: error.message };
+      }
+    });
   }
 );
 
