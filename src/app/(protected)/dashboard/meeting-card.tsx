@@ -10,23 +10,18 @@ import { Button } from '@/components/ui/button'
 import useProject from '@/hooks/use-project'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { useMutation } from '@tanstack/react-query'
-import axios from 'axios'
 import { api } from '@/trpc/react'
 import { GlassmorphicCard } from '@/components/ui/glassmorphic-card'
 import { motion } from 'framer-motion'
+import axios from 'axios'
 
 const MeetingCard = () => {
     const { project } = useProject();
-    const processMeeting = useMutation({mutationFn: async (data: {meetingUrl: string, meetingId: string, projectId: string}) => {
-        const { meetingUrl, meetingId, projectId } = data
-        const response = await axios.post('/api/process-meeting', { meetingUrl, meetingId, projectId })
-        return response.data
-    }})
     const [isUploading, setIsUploading] = React.useState(false)
     const [progress, setProgress] = React.useState(0)
     const router = useRouter()
     const uploadMeeting = api.project.uploadMeeting.useMutation()
+    
     const { getRootProps, getInputProps } = useDropzone({
         accept: {
             'audio/*': ['.mp3', '.wav', '.m4a'],
@@ -34,28 +29,51 @@ const MeetingCard = () => {
         multiple: false,
         maxSize: 50_000_000,
         onDrop: async (acceptedFiles) => {
-            if(!project) return
+            if(!project) {
+                toast.error('Please select a project first');
+                return;
+            }
+            
             setIsUploading(true)
             console.log(acceptedFiles)
             const file = acceptedFiles[0]
             if(!file) return
-            const downloadUrl = await uploadFile(file as File, setProgress) as string
-            uploadMeeting.mutate({ 
-                projectId: project.id, 
-                meetingUrl: downloadUrl, 
-                name: file.name
-            }, {
-                onSuccess: (meeting) => {
-                    toast.success('Meeting uploaded successfully')
-                    router.push('/meetings')
-                    processMeeting.mutateAsync({meetingUrl: downloadUrl, meetingId: meeting.id, projectId: project.id})
-                },
-                onError: () => {
-                    toast.error('Failed to upload meeting')
+            
+            try {
+                // Upload file to Firebase
+                const downloadUrl = await uploadFile(file as File, setProgress) as string
+                
+                // Create meeting record in database
+                const meeting = await uploadMeeting.mutateAsync({ 
+                    projectId: project.id, 
+                    meetingUrl: downloadUrl, 
+                    name: file.name
+                });
+
+                toast.success('Meeting uploaded successfully! Processing started...')
+                router.push('/meetings')
+                
+                // Trigger background processing via API
+                try {
+                    await axios.post('/api/process-meeting', {
+                        meetingUrl: downloadUrl, 
+                        meetingId: meeting.id, 
+                        projectId: project.id
+                    });
+                    
+                    console.log(`Meeting processing job queued for meeting ${meeting.id}`);
+                } catch (processingError) {
+                    console.error('Error queuing meeting processing:', processingError);
+                    toast.warning('Meeting uploaded but processing may be delayed. Please refresh the meetings page.');
                 }
-            })
-            window.alert(downloadUrl)
-            setIsUploading(false)
+                
+            } catch (error) {
+                console.error('Error uploading meeting:', error);
+                toast.error('Failed to upload meeting. Please try again.');
+            } finally {
+                setIsUploading(false);
+                setProgress(0);
+            }
         }
     }) 
     
@@ -150,6 +168,9 @@ const MeetingCard = () => {
                     </div>
                     <p className='text-sm text-white/80 text-center mt-4 font-medium'>
                         Uploading your meeting...
+                    </p>
+                    <p className='text-xs text-white/60 text-center mt-1'>
+                        Processing will continue in the background
                     </p>
                 </motion.div>
             )}

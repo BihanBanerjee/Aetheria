@@ -17,7 +17,7 @@ import MeetingLoader from './meeting-loader'
 const MeetingsPage = () => {
     const { projectId } = useProject()
     const { data: meetings, isLoading } = api.project.getMeetings.useQuery({ projectId }, {
-        refetchInterval: 4000 
+        refetchInterval: 3000 // Poll every 3 seconds for real-time updates
     })
     const deleteMeeting = api.project.deleteMeeting.useMutation()
     const refetch = useRefetch()
@@ -79,6 +79,11 @@ const MeetingsPage = () => {
                                                     </Badge>
                                                 </div>
                                             )}
+                                            {meeting.status === 'COMPLETED' && meeting.issues.length === 0 && (
+                                                <Badge className="bg-red-500/20 text-red-200 border-red-500/30">
+                                                    Processing Failed
+                                                </Badge>
+                                            )}
                                         </div>
                                         <div className='flex items-center gap-4 text-sm text-white/60'>
                                             <div className='flex items-center'>
@@ -90,21 +95,39 @@ const MeetingsPage = () => {
                                                 {meeting.createdAt.toLocaleTimeString()}
                                             </div>
                                             <div>
-                                                {meeting.issues.length} issues identified
+                                                {meeting.status === 'PROCESSING' 
+                                                    ? 'Processing in progress...' 
+                                                    : `${meeting.issues.length} issues identified`
+                                                }
                                             </div>
                                         </div>
                                     </div>
                                     <div className='flex items-center gap-3'>
-                                        <Link href={`/meetings/${meeting.id}`}>
+                                        {meeting.status === 'COMPLETED' && meeting.issues.length > 0 && (
+                                            <Link href={`/meetings/${meeting.id}`}>
+                                                <Button 
+                                                    size='sm' 
+                                                    variant='outline'
+                                                    className="border-white/20 bg-white/10 text-white"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    View Details
+                                                </Button>
+                                            </Link>
+                                        )}
+                                        
+                                        {meeting.status === 'PROCESSING' && (
                                             <Button 
                                                 size='sm' 
                                                 variant='outline'
-                                                className="border-white/20 bg-white/10 text-white"
+                                                disabled
+                                                className="border-amber-400/20 bg-amber-400/10 text-amber-200 cursor-not-allowed"
                                             >
-                                                <Eye className="h-4 w-4 mr-1" />
-                                                View Details
+                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-200 mr-1"></div>
+                                                Processing...
                                             </Button>
-                                        </Link>
+                                        )}
+                                        
                                         <Button 
                                             disabled={deleteMeeting.isPending} 
                                             size='sm' 

@@ -85,6 +85,12 @@ model SourceCodeEmbedding {
   project      Project   @relation(fields: [projectId], references: [id])
 }
 
+enum MeetingStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Meeting {
   id           String    @id @default(cuid())
   createdAt    DateTime  @default(now())
@@ -115,10 +121,6 @@ model Issue {
   meeting      Meeting   @relation(fields: [meetingId], references: [id])
 }
 
-enum MeetingStatus {
-  PROCESSING
-  COMPLETED
-}
 model Question {
   id           String    @id @default(cuid())
   createdAt    DateTime  @default(now())

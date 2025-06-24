@@ -3,6 +3,7 @@ import { inngest } from "./client";
 import { indexGithubRepo, loadGithubRepo } from "@/lib/github-loader";
 import { pollCommits } from "@/lib/github";
 import { summariseCode, generateEmbedding } from "@/lib/gemini";
+import { processMeeting } from "@/lib/assembly";
 import { db } from "@/server/db";
 
 export type ProjectStatus = 
@@ -12,6 +13,11 @@ export type ProjectStatus =
   | "POLLING_COMMITS" 
   | "DEDUCTING_CREDITS" 
   | "COMPLETED" 
+  | "FAILED";
+
+export type MeetingStatus = 
+  | "PROCESSING"
+  | "COMPLETED"
   | "FAILED";
 
 export const processProjectCreation = inngest.createFunction(
@@ -173,6 +179,110 @@ export const processProjectCreation = inngest.createFunction(
   }
 );
 
+// New function for processing meetings
+export const processMeetingFunction = inngest.createFunction(
+  {
+    id: "aetheria-process-meeting",
+    name: "Aetheria: Process Meeting Recording"
+  },
+  { event: "meeting.processing.requested" },
+  async ({ event, step }) => {
+    const { meetingUrl, meetingId, projectId } = event.data;
+
+    try {
+      console.log(`Starting to process meeting ${meetingId}`);
+
+      // Step 1: Process the meeting audio
+      const meetingData = await step.run("process-meeting-audio", async () => {
+        console.log(`Processing audio for meeting ${meetingId}`);
+        
+        try {
+          const { summaries } = await processMeeting(meetingUrl);
+          console.log(`Successfully processed ${summaries.length} discussion points`);
+          return summaries;
+        } catch (error) {
+          console.error(`Error processing meeting audio:`, error);
+          throw new Error(`Failed to process meeting audio: ${error.message}`);
+        }
+      });
+
+      // Step 2: Save issues to database
+      await step.run("save-meeting-issues", async () => {
+        console.log(`Saving ${meetingData.length} issues to database`);
+        
+        try {
+          // Create all issues
+          await db.issue.createMany({
+            data: meetingData.map(summary => ({
+              start: summary.start,
+              end: summary.end,
+              gist: summary.gist,
+              headline: summary.headline,
+              summary: summary.summary,
+              meetingId
+            }))
+          });
+
+          console.log(`Successfully saved ${meetingData.length} issues`);
+          return { savedIssues: meetingData.length };
+        } catch (error) {
+          console.error(`Error saving issues:`, error);
+          throw new Error(`Failed to save issues: ${error.message}`);
+        }
+      });
+
+      // Step 3: Update meeting status and name
+      await step.run("update-meeting-status", async () => {
+        console.log(`Updating meeting ${meetingId} status to COMPLETED`);
+        
+        try {
+          const meetingName = meetingData[0]?.headline || 'Meeting Summary';
+          
+          const updatedMeeting = await db.meeting.update({
+            where: { id: meetingId },
+            data: {
+              status: 'COMPLETED',
+              name: meetingName
+            }
+          });
+
+          console.log(`Meeting ${meetingId} successfully completed with name: ${meetingName}`);
+          return updatedMeeting;
+        } catch (error) {
+          console.error(`Error updating meeting status:`, error);
+          throw new Error(`Failed to update meeting status: ${error.message}`);
+        }
+      });
+
+      console.log(`Meeting ${meetingId} processing completed successfully`);
+      return { 
+        success: true, 
+        meetingId, 
+        issuesCreated: meetingData.length,
+        meetingName: meetingData[0]?.headline || 'Meeting Summary'
+      };
+
+    } catch (error) {
+      console.error(`Error processing meeting ${meetingId}:`, error);
+      
+      // Mark meeting as failed
+      await step.run("mark-meeting-failed", async () => {
+        try {
+          return await db.meeting.update({
+            where: { id: meetingId },
+            data: { status: 'COMPLETED' } // Keep as COMPLETED but with no issues
+          });
+        } catch (dbError) {
+          console.error(`Failed to update meeting status to failed:`, dbError);
+          return null;
+        }
+      });
+
+      throw error;
+    }
+  }
+);
+
 // Helper function for processing commits in smaller batches
 async function pollCommitsInBatches(projectId: string) {
   // Get project GitHub URL
@@ -253,4 +363,4 @@ async function pollCommitsInBatches(projectId: string) {
   return { count: totalProcessed };
 }
 
-export const functions = [processProjectCreation];
+export const functions = [processProjectCreation, processMeetingFunction];

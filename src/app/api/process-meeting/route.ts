@@ -1,9 +1,9 @@
-// /api/process-meeting
-import { processMeeting } from "@/lib/assembly";
+// src/app/api/process-meeting/route.ts
 import { db } from "@/server/db";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { inngest } from "@/lib/inngest/client";
 
 const bodyParser = z.object({
     meetingUrl: z.string(),
@@ -11,7 +11,6 @@ const bodyParser = z.object({
     meetingId: z.string()
 })
 
-const maxDuration = 300 // 5 minutes function wouldn't timeout until 5 mins after deploying it on vercel.
 export async function POST(req: NextRequest) {
     const { userId } = await auth();
     if(!userId) {
@@ -21,32 +20,45 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const { meetingUrl, projectId, meetingId } = bodyParser.parse(body);
-        const { summaries } = await processMeeting(meetingUrl)
-        await db.issue.createMany({
-            data: summaries.map(summary => ({
-                start: summary.start,
-                end: summary.end,
-                gist: summary.gist,
-                headline: summary.headline,
-                summary: summary.summary,
-                meetingId
-            }))
-        })
-
-        await db.meeting.update({
+        
+        // Verify the meeting exists and belongs to the user
+        const meeting = await db.meeting.findFirst({
             where: {
-                id: meetingId
-            },
-            data: {
-                status: 'COMPLETED',
-                name: summaries[0]!.headline
+                id: meetingId,
+                project: {
+                    userToProjects: {
+                        some: {
+                            userId: userId
+                        }
+                    }
+                }
             }
-        })
+        });
 
-        return NextResponse.json({success: true}, {status: 200})
+        if (!meeting) {
+            return NextResponse.json({error: 'Meeting not found or unauthorized'}, {status: 404});
+        }
+
+        // Trigger the background processing with Inngest
+        await inngest.send({
+            name: "meeting.processing.requested",
+            data: {
+                meetingUrl,
+                meetingId,
+                projectId
+            }
+        });
+
+        console.log(`Meeting processing job queued for meeting ${meetingId}`);
+        
+        return NextResponse.json({
+            success: true, 
+            message: 'Meeting processing started',
+            meetingId
+        }, {status: 200});
+
     } catch(error) {
-        console.error(error);
+        console.error('Error queuing meeting processing:', error);
         return NextResponse.json({error: 'Internal Server Error'}, {status: 500})
     }
-
 }
