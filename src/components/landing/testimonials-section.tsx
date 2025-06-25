@@ -83,7 +83,7 @@ function TestimonialCard({ name, role, testimonial, delay, imageUrl }: Testimoni
             </div>
           </div>
           <p className="text-white/80 italic mb-4">
-            "{testimonial}"
+            &quot;{testimonial}&quot;
           </p>
           <div className="flex">
             {[...Array(5)].map((_, i) => (
