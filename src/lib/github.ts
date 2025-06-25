@@ -2,6 +2,7 @@ import { db } from "@/server/db";
 import { Octokit } from "octokit";
 import axios from "axios";
 import { aisummariseCommit, delay } from "./gemini";
+import type { CommitProcessingStatus } from "@prisma/client";
 
 export const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
@@ -59,128 +60,176 @@ export const getCommitHashes = async (githubUrl: string): Promise<CommitResponse
 // Poll commits for a project and process them :->
 
 export const pollCommits = async (projectId: string) => {
-    try {
-        console.log(`Polling commits for project ${projectId}`);
-        
-        const { githubUrl } = await fetchProjectGithubUrl(projectId);
-        const commitHashes = await getCommitHashes(githubUrl);
-        console.log(`Found ${commitHashes.length} total commits`);
-        
-        const unprocessedCommits = await filterUnprocessedCommits(projectId, commitHashes);
-        console.log(`Found ${unprocessedCommits.length} unprocessed commits`);
-        
-        if (unprocessedCommits.length === 0) {
-            console.log("No new commits to process");
-            return { count: 0 };
-        }
-        
-        // Process commits in batches to avoid rate limiting
-        const BATCH_SIZE = 3;
-        const processedCommits: any[] = [];
-        
-        for (let i = 0; i < unprocessedCommits.length; i += BATCH_SIZE) {
-            console.log(`Processing commit batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(unprocessedCommits.length/BATCH_SIZE)}`);
-            
-            const batch = unprocessedCommits.slice(i, i + BATCH_SIZE);
-            const commitPromiseResults = await Promise.allSettled(batch.map(async (commit) => {
-                try {
-                    const diffData = await fetchCommitDiff(githubUrl, commit.commitHash);
-                    
-                    // Check if diff is too large
-                    if (diffData.length > 100000) {
-                        console.warn(`Commit ${commit.commitHash} has a very large diff (${diffData.length} bytes), truncating...`);
-                    }
-                    
-                    // Get summary with retries if needed
-                    let summary = "";
-                    let retries = 0;
-                    const MAX_RETRIES = 2;
-                    
-                    while (retries <= MAX_RETRIES) {
-                        try {
-                            summary = await aisummariseCommit(diffData) || "";
-                            if (summary && summary.trim().length > 0) {
-                                break; // Success, exit retry loop
-                            }
-                            console.warn(`Empty summary for commit ${commit.commitHash}, retrying (${retries + 1}/${MAX_RETRIES + 1})...`);
-                        } catch (summaryError) {
-                            console.error(`Error getting summary for commit ${commit.commitHash}, retry ${retries + 1}/${MAX_RETRIES + 1}:`, summaryError);
-                        }
-                        
-                        retries++;
-                        if (retries <= MAX_RETRIES) {
-                            await delay(2000); // Wait before retrying
-                        }
-                    }
-                    
-                    // If all retries failed, set a default message
-                    if (!summary || summary.trim().length === 0) {
-                        summary = `Commit containing changes to multiple files. View the full diff for details.`;
-                    }
-                    
-                    return {
-                        projectId,
-                        commitHash: commit.commitHash,
-                        commitMessage: commit.commitMessage,
-                        commitAuthorName: commit.commitAuthorName,
-                        commitAuthorAvatar: commit.commitAuthorAvatar,
-                        commitDate: commit.commitDate,
-                        summary
-                    };
-                } catch (error) {
-                    console.error(`Error processing commit ${commit.commitHash}:`, error);
-                    return {
-                        projectId,
-                        commitHash: commit.commitHash,
-                        commitMessage: commit.commitMessage,
-                        commitAuthorName: commit.commitAuthorName,
-                        commitAuthorAvatar: commit.commitAuthorAvatar,
-                        commitDate: commit.commitDate,
-                        summary: "Failed to process commit diff"
-                    };
-                }
-            }));
-            
-            // Extract fulfilled results
-            commitPromiseResults.forEach(result => {
-                if (result.status === 'fulfilled') {
-                    processedCommits.push(result.value);
-                } else {
-                    console.error("Failed to process a commit:", result.reason);
-                }
-            });
-            
-            // Add a delay between batches to avoid rate limiting
-            if (i + BATCH_SIZE < unprocessedCommits.length) {
-                console.log("Pausing between batches to avoid rate limiting...");
-                await delay(3000); // 3 second delay between batches
-            }
-        }
-        
-        // Save all processed commits to the database
-        console.log(`Saving ${processedCommits.length} processed commits to database`);
-        
-        // Save commits one by one to handle errors better
-        const commitSavePromises = processedCommits.map(commitData => 
-            db.commit.create({ data: commitData })
-                .catch(dbError => {
-                    console.error(`Database error saving commit ${commitData.commitHash}:`, dbError);
-                    return null;
-                })
-        );
-        
-        const savedResults = await Promise.allSettled(commitSavePromises);
-        const savedCommits = savedResults
-            .filter(result => result.status === 'fulfilled' && result.value !== null)
-            .map(result => (result.status === 'fulfilled' ? result.value : null))
-            .filter(Boolean);
-        
-        console.log(`Successfully saved ${savedCommits.length} commits`);
-        return { count: savedCommits.length };
-    } catch (error) {
-        console.error("Error in pollCommits:", error);
-        throw new Error(`Failed to poll commits: ${error.message}`);
+  try {
+    console.log(`Polling commits for project ${projectId}`);
+    
+    const { githubUrl } = await fetchProjectGithubUrl(projectId);
+    const commitHashes = await getCommitHashes(githubUrl);
+    console.log(`Found ${commitHashes.length} total commits from GitHub`);
+    
+    const unprocessedCommits = await filterUnprocessedCommits(projectId, commitHashes);
+    console.log(`Found ${unprocessedCommits.length} commits needing (re)processing`);
+    
+    if (unprocessedCommits.length === 0) {
+      console.log("No commits need processing");
+      return { count: 0 };
     }
+    
+    // Mark commits as PROCESSING before starting
+    for (const commit of unprocessedCommits) {
+      try {
+        await db.commit.upsert({
+          where: {
+            projectId_commitHash: {
+              projectId,
+              commitHash: commit.commitHash
+            }
+          },
+          update: {
+            processingStatus: 'PROCESSING'
+          },
+          create: {
+            projectId,
+            commitHash: commit.commitHash,
+            commitMessage: commit.commitMessage,
+            commitAuthorName: commit.commitAuthorName,
+            commitAuthorAvatar: commit.commitAuthorAvatar,
+            commitDate: commit.commitDate,
+            summary: "Processing in progress...",
+            processingStatus: 'PROCESSING'
+          }
+        });
+      } catch (error) {
+        console.error(`Error marking commit ${commit.commitHash} as processing:`, error);
+      }
+    }
+    
+    // Process commits in batches
+    const BATCH_SIZE = 3;
+    const processedCommits: any[] = [];
+    
+    for (let i = 0; i < unprocessedCommits.length; i += BATCH_SIZE) {
+      console.log(`Processing commit batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(unprocessedCommits.length/BATCH_SIZE)}`);
+      
+      const batch = unprocessedCommits.slice(i, i + BATCH_SIZE);
+      const commitPromiseResults = await Promise.allSettled(batch.map(async (commit) => {
+        try {
+          const diffData = await fetchCommitDiff(githubUrl, commit.commitHash);
+          
+          if (diffData.length > 100000) {
+            console.warn(`Commit ${commit.commitHash} has a very large diff (${diffData.length} bytes), truncating...`);
+          }
+          
+          // Get summary with retries
+          let summary = "";
+          let processingStatus: CommitProcessingStatus = 'FAILED';
+          let retries = 0;
+          const MAX_RETRIES = 2;
+          
+          while (retries <= MAX_RETRIES) {
+            try {
+              summary = await aisummariseCommit(diffData) || "";
+              if (summary && summary.trim().length > 0 && !summary.includes("Failed to")) {
+                processingStatus = 'COMPLETED';
+                break; // Success!
+              }
+              console.warn(`Poor quality summary for commit ${commit.commitHash}, retrying (${retries + 1}/${MAX_RETRIES + 1})...`);
+            } catch (summaryError) {
+              console.error(`Error getting summary for commit ${commit.commitHash}, retry ${retries + 1}/${MAX_RETRIES + 1}:`, summaryError);
+            }
+            
+            retries++;
+            if (retries <= MAX_RETRIES) {
+              await delay(2000);
+            }
+          }
+          
+          // Set final summary and status
+          if (processingStatus === 'FAILED' || !summary || summary.trim().length === 0) {
+            summary = `Processing failed: Unable to generate AI summary for this commit. View the full diff for details.`;
+            processingStatus = 'FAILED';
+          }
+          
+          return {
+            projectId,
+            commitHash: commit.commitHash,
+            commitMessage: commit.commitMessage,
+            commitAuthorName: commit.commitAuthorName,
+            commitAuthorAvatar: commit.commitAuthorAvatar,
+            commitDate: commit.commitDate,
+            summary,
+            processingStatus
+          };
+        } catch (error) {
+          console.error(`Error processing commit ${commit.commitHash}:`, error);
+          return {
+            projectId,
+            commitHash: commit.commitHash,
+            commitMessage: commit.commitMessage,
+            commitAuthorName: commit.commitAuthorName,
+            commitAuthorAvatar: commit.commitAuthorAvatar,
+            commitDate: commit.commitDate,
+            summary: `Processing failed: ${error.message || 'Unknown error'}`,
+            processingStatus: 'FAILED' as CommitProcessingStatus
+          };
+        }
+      }));
+      
+      // Extract fulfilled results
+      commitPromiseResults.forEach(result => {
+        if (result.status === 'fulfilled') {
+          processedCommits.push(result.value);
+        } else {
+          console.error("Failed to process a commit:", result.reason);
+        }
+      });
+      
+      // Add delay between batches
+      if (i + BATCH_SIZE < unprocessedCommits.length) {
+        console.log("Pausing between batches to avoid rate limiting...");
+        await delay(3000);
+      }
+    }
+    
+    // Update all processed commits in database
+    console.log(`Updating ${processedCommits.length} processed commits in database`);
+    
+    for (const commitData of processedCommits) {
+      try {
+        await db.commit.upsert({
+          where: {
+            projectId_commitHash: {
+              projectId: commitData.projectId,
+              commitHash: commitData.commitHash
+            }
+          },
+          update: {
+            summary: commitData.summary,
+            processingStatus: commitData.processingStatus,
+            updatedAt: new Date()
+          },
+          create: commitData
+        });
+        
+        console.log(`✅ Updated commit ${commitData.commitHash.substring(0, 8)} with status: ${commitData.processingStatus}`);
+      } catch (dbError) {
+        console.error(`Database error updating commit ${commitData.commitHash}:`, dbError);
+      }
+    }
+    
+    const successfulCount = processedCommits.filter(c => c.processingStatus === 'COMPLETED').length;
+    const failedCount = processedCommits.filter(c => c.processingStatus === 'FAILED').length;
+    
+    console.log(`Processing completed: ${successfulCount} successful, ${failedCount} failed`);
+    return { 
+      count: processedCommits.length, 
+      successful: successfulCount, 
+      failed: failedCount 
+    };
+  } catch (error) {
+    console.error("Error in pollCommits:", error);
+    throw new Error(`Failed to poll commits: ${error.message}`);
+  }
 };
 
 
@@ -260,13 +309,41 @@ async function fetchProjectGithubUrl(projectId: string) {
 
 // Filter out commits that have already been processed
 
-async function filterUnprocessedCommits(projectId: string, commitHashes: CommitResponse[]) {
-    const processedCommits = await db.commit.findMany({
-        where: { projectId },
-        select: { commitHash: true }
-    });
+async function filterUnprocessedCommits(projectId: string, commitHashes: CommitResponse[]): Promise<CommitResponse[]> {
+  const processedCommits = await db.commit.findMany({
+    where: { projectId },
+    select: { 
+      commitHash: true, 
+      summary: true, 
+      processingStatus: true 
+    }
+  });
+  
+  const successfullyProcessedHashes = new Set<string>();
+  
+  processedCommits.forEach(commit => {
+    // Only consider it "successfully processed" if:
+    // 1. Status is COMPLETED, AND
+    // 2. Summary doesn't contain failure indicators, AND  
+    // 3. Summary has reasonable length (not just error message)
+    const isValidSummary = !commit.summary.includes("Failed to") && 
+                          !commit.summary.includes("API error") &&
+                          !commit.summary.includes("Failed to process") &&
+                          !commit.summary.includes("Processing failed") &&
+                          commit.summary.length > 20;
     
-    const processedHashes = new Set(processedCommits.map(commit => commit.commitHash));
-    
-    return commitHashes.filter(commit => !processedHashes.has(commit.commitHash));
+    if (commit.processingStatus === 'COMPLETED' && isValidSummary) {
+      successfullyProcessedHashes.add(commit.commitHash);
+    }
+  });
+  
+  const unprocessedCommits = commitHashes.filter(commit => 
+    !successfullyProcessedHashes.has(commit.commitHash)
+  );
+  
+  console.log(`Found ${processedCommits.length} total commits in database`);
+  console.log(`Found ${successfullyProcessedHashes.size} successfully processed commits`);
+  console.log(`Found ${unprocessedCommits.length} commits that need (re)processing`);
+  
+  return unprocessedCommits;
 }

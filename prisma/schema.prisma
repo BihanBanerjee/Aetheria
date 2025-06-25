@@ -137,6 +137,11 @@ model Question {
   user         User       @relation(fields: [userId], references: [id])
 }
 
+enum CommitProcessingStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
 model Commit {
   id           String    @id @default(cuid())
   createdAt    DateTime  @default(now())
@@ -153,6 +158,12 @@ model Commit {
 
   //ai summary
   summary String
+  
+  // NEW: Processing status field
+  processingStatus CommitProcessingStatus @default(COMPLETED)
+  
+  // NEW: Unique constraint for upsert operations
+  @@unique([projectId, commitHash], name: "projectId_commitHash")
 }
 
 model StripeTransction {

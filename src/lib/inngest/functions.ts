@@ -5,6 +5,7 @@ import { pollCommits } from "@/lib/github";
 import { summariseCode, generateEmbedding } from "@/lib/gemini";
 import { checkTranscriptionStatus, processMeeting, retrieveTranscriptionResults, submitMeetingForProcessing } from "@/lib/assembly";
 import { db } from "@/server/db";
+import type { CommitProcessingStatus } from "@prisma/client";
 
 export type ProjectStatus = 
   | "INITIALIZING" 
@@ -246,10 +247,10 @@ export const processSingleCommit = inngest.createFunction(
   {
     id: "aetheria-process-single-commit",
     name: "Process Single Commit",
-    retries: 2, // Allow retries for failed commits
+    retries: 2,
     concurrency: {
-      limit: 5, // Increased from 3 to 5 since we're using waves
-      key: "global" // Global concurrency limit for Gemini API protection
+      limit: 5,
+      key: "global"
     }
   },
   { event: "project.commit.process.requested" },
@@ -266,40 +267,48 @@ export const processSingleCommit = inngest.createFunction(
     } = event.data;
 
     try {
-      // Step 1: Wave delay (all commits in wave start together after this delay)
+      // Step 1: Mark as processing
+      await step.run("mark-processing", async () => {
+        return await db.commit.upsert({
+          where: {
+            projectId_commitHash: {
+              projectId,
+              commitHash: commit.commitHash
+            }
+          },
+          update: {
+            processingStatus: 'PROCESSING'
+          },
+          create: {
+            projectId,
+            commitHash: commit.commitHash,
+            commitMessage: commit.commitMessage,
+            commitAuthorName: commit.commitAuthorName,
+            commitAuthorAvatar: commit.commitAuthorAvatar,
+            commitDate: commit.commitDate,
+            summary: "Processing in progress...",
+            processingStatus: 'PROCESSING'
+          }
+        });
+      });
+
+      // Wave delay
       if (delaySeconds && delaySeconds > 0) {
         await step.sleep("wave-delay", `${delaySeconds}s`);
       }
 
-      // Step 2: Small random delay within the wave to avoid exact simultaneity
-      const randomDelay = Math.floor(Math.random() * 3000); // 0-3 seconds
+      // Random delay within wave
+      const randomDelay = Math.floor(Math.random() * 3000);
       if (randomDelay > 0) {
         await step.sleep("random-delay", `${randomDelay}ms`);
       }
 
-      // Step 3: Process the individual commit
+      // Step 2: Process the commit
       const result = await step.run("process-commit", async () => {
         try {
           console.log(`🌊 Wave ${waveIndex + 1}/${totalWaves} - Processing commit ${commitIndex + 1}/${totalCommits}: ${commit.commitHash.substring(0, 8)}`);
           
-          // Check if commit already exists (in case of retry)
-          const existingCommit = await db.commit.findFirst({
-            where: {
-              projectId,
-              commitHash: commit.commitHash
-            }
-          });
-
-          if (existingCommit) {
-            console.log(`Commit ${commit.commitHash.substring(0, 8)} already processed, skipping`);
-            return { 
-              success: true, 
-              skipped: true, 
-              commitHash: commit.commitHash 
-            };
-          }
-
-          // Get commit diff with timeout
+          // Get commit diff
           const axios = (await import("axios")).default;
           
           let diffData;
@@ -307,10 +316,8 @@ export const processSingleCommit = inngest.createFunction(
             const { data } = await axios.get(
               `${githubUrl}/commit/${commit.commitHash}.diff`, 
               { 
-                timeout: 15000, // 15 second timeout
-                headers: {
-                  'Accept': 'application/vnd.github.v3.diff'
-                }
+                timeout: 15000,
+                headers: { 'Accept': 'application/vnd.github.v3.diff' }
               }
             );
             diffData = data;
@@ -319,57 +326,85 @@ export const processSingleCommit = inngest.createFunction(
             diffData = "Unable to fetch commit diff";
           }
           
-          // The Gemini API call now has built-in rate limiting and delays
+          // Generate AI summary
           const { aisummariseCommit } = await import("@/lib/gemini");
           let summary;
+          let processingStatus: CommitProcessingStatus = 'FAILED';
           
           try {
             summary = await aisummariseCommit(diffData);
-            if (!summary || summary.trim().length === 0) {
-              summary = `Commit containing changes to ${commit.commitMessage || 'multiple files'}`;
+            if (summary && summary.trim().length > 0 && !summary.includes("Failed to")) {
+              processingStatus = 'COMPLETED';
+            } else {
+              summary = `Processing failed: Unable to generate AI summary for commit ${commit.commitMessage || commit.commitHash.substring(0, 8)}`;
             }
           } catch (summaryError) {
             console.error(`Error summarizing commit ${commit.commitHash}:`, summaryError);
-            summary = `Commit: ${commit.commitMessage || 'Changes to codebase'}`;
+            summary = `Processing failed: ${summaryError.message || 'AI summary generation failed'}`;
           }
           
-          // Save to database
-          const savedCommit = await db.commit.create({
-            data: {
+          // Update in database
+          const updatedCommit = await db.commit.upsert({
+            where: {
+              projectId_commitHash: {
+                projectId,
+                commitHash: commit.commitHash
+              }
+            },
+            update: {
+              summary: summary || "Failed to process commit",
+              processingStatus,
+              updatedAt: new Date()
+            },
+            create: {
               projectId,
               commitHash: commit.commitHash,
               commitMessage: commit.commitMessage,
               commitAuthorName: commit.commitAuthorName,
               commitAuthorAvatar: commit.commitAuthorAvatar,
               commitDate: commit.commitDate,
-              summary: summary || "Failed to generate summary"
+              summary: summary || "Failed to process commit",
+              processingStatus
             }
           });
           
-          console.log(`✅ Wave ${waveIndex + 1} - Successfully processed commit: ${commit.commitHash.substring(0, 8)}`);
+          const statusEmoji = processingStatus === 'COMPLETED' ? '✅' : '❌';
+          console.log(`${statusEmoji} Wave ${waveIndex + 1} - Commit: ${commit.commitHash.substring(0, 8)} - Status: ${processingStatus}`);
           
           return { 
-            success: true, 
-            skipped: false, 
+            success: processingStatus === 'COMPLETED', 
             commitHash: commit.commitHash,
-            savedCommitId: savedCommit.id,
+            processingStatus,
+            savedCommitId: updatedCommit.id,
             waveIndex
           };
           
         } catch (error) {
           console.error(`❌ Wave ${waveIndex + 1} - Error processing commit ${commit.commitHash}:`, error);
           
-          // Create a basic record even if processing fails
+          // Mark as failed in database
           try {
-            const fallbackCommit = await db.commit.create({
-              data: {
+            const failedCommit = await db.commit.upsert({
+              where: {
+                projectId_commitHash: {
+                  projectId,
+                  commitHash: commit.commitHash
+                }
+              },
+              update: {
+                summary: `Processing failed: ${error.message?.substring(0, 100) || 'Unknown error'}`,
+                processingStatus: 'FAILED',
+                updatedAt: new Date()
+              },
+              create: {
                 projectId,
                 commitHash: commit.commitHash,
                 commitMessage: commit.commitMessage,
                 commitAuthorName: commit.commitAuthorName,
                 commitAuthorAvatar: commit.commitAuthorAvatar,
                 commitDate: commit.commitDate,
-                summary: `Processing failed: ${error.message?.substring(0, 100) || 'Unknown error'}`
+                summary: `Processing failed: ${error.message?.substring(0, 100) || 'Unknown error'}`,
+                processingStatus: 'FAILED'
               }
             });
             
@@ -377,16 +412,17 @@ export const processSingleCommit = inngest.createFunction(
               success: false, 
               error: error.message, 
               commitHash: commit.commitHash,
-              fallbackCommitId: fallbackCommit.id,
+              processingStatus: 'FAILED' as CommitProcessingStatus,
+              fallbackCommitId: failedCommit.id,
               waveIndex
             };
           } catch (dbError) {
-            // If even the fallback fails, just return the error
-            console.error(`Failed to create fallback commit record:`, dbError);
+            console.error(`Failed to create failed commit record:`, dbError);
             return { 
               success: false, 
               error: error.message, 
               commitHash: commit.commitHash,
+              processingStatus: 'FAILED' as CommitProcessingStatus,
               waveIndex
             };
           }
@@ -401,6 +437,7 @@ export const processSingleCommit = inngest.createFunction(
     }
   }
 );
+
 
 // MEETING PROCESSING (unchanged)
 export const processMeetingFunction = inngest.createFunction(
