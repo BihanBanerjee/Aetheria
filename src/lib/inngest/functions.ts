@@ -20,7 +20,7 @@ export type MeetingStatus =
   | "COMPLETED"
   | "FAILED";
 
-// Updated processProjectCreation with timeout-safe steps
+// Updated processProjectCreation with separate commit processing
 
 export const processProjectCreation = inngest.createFunction(
   { 
@@ -123,17 +123,13 @@ export const processProjectCreation = inngest.createFunction(
         }
       }
 
-      // Step 3: Process commits in small batches (< 60 seconds per batch)
-      await step.run("start-commit-processing", async () => {
+      // Step 3: Queue commits in batches for controlled parallel processing
+      await step.run("queue-commit-processing", async () => {
         await db.project.update({
           where: { id: projectId },
           data: { status: 'POLLING_COMMITS' }
         });
-        return { message: "Starting commit processing" };
-      });
 
-      // Get commits and process in safe batches
-      const commitData = await step.run("get-commit-list", async () => {
         const project = await db.project.findUnique({
           where: { id: projectId },
           select: { githubUrl: true }
@@ -154,76 +150,51 @@ export const processProjectCreation = inngest.createFunction(
         
         const processedHashes = new Set(processedCommits.map(commit => commit.commitHash));
         const unprocessedCommits = commitHashes.filter(commit => !processedHashes.has(commit.commitHash));
-        
-        return { unprocessedCommits, githubUrl: project.githubUrl };
-      });
 
-      // Process commits in small batches (1-2 commits per step to stay under 60s)
-      const COMMIT_BATCH_SIZE = 1; // Process 1 commit per step for safety
-      const commitBatches = Math.ceil(commitData.unprocessedCommits.length / COMMIT_BATCH_SIZE);
-      
-      for (let i = 0; i < commitBatches; i++) {
-        const startIdx = i * COMMIT_BATCH_SIZE;
-        const endIdx = Math.min(startIdx + COMMIT_BATCH_SIZE, commitData.unprocessedCommits.length);
-        const commitBatch = commitData.unprocessedCommits.slice(startIdx, endIdx);
+        console.log(`Queuing ${unprocessedCommits.length} commits for processing`);
+
+        // Process commits in waves - better than sequential!
+        const WAVE_SIZE = 3; // Process 3 commits simultaneously
+        const WAVE_DELAY = 20; // 20 seconds between waves
+        const totalWaves = Math.ceil(unprocessedCommits.length / WAVE_SIZE);
         
-        if (commitBatch.length === 0) break;
-        
-        await step.run(`process-commits-${i}`, async () => {
-          console.log(`Processing commit batch ${i + 1}/${commitBatches}`);
+        for (let waveIndex = 0; waveIndex < totalWaves; waveIndex++) {
+          const startIndex = waveIndex * WAVE_SIZE;
+          const endIndex = Math.min(startIndex + WAVE_SIZE, unprocessedCommits.length);
+          const waveCommits = unprocessedCommits.slice(startIndex, endIndex);
           
-          for (const commit of commitBatch) {
-            try {
-              // Get commit diff (should be < 10 seconds)
-              const axios = (await import("axios")).default;
-              const { data: diffData } = await axios.get(
-                `${commitData.githubUrl}/commit/${commit.commitHash}.diff`, 
-                { timeout: 10000 }
-              );
-              
-              // Summarize diff (should be < 30 seconds)
-              const { aisummariseCommit } = await import("@/lib/gemini");
-              const summary = await aisummariseCommit(diffData);
-              
-              // Save to database (< 5 seconds)
-              await db.commit.create({
-                data: {
-                  projectId,
-                  commitHash: commit.commitHash,
-                  commitMessage: commit.commitMessage,
-                  commitAuthorName: commit.commitAuthorName,
-                  commitAuthorAvatar: commit.commitAuthorAvatar,
-                  commitDate: commit.commitDate,
-                  summary: summary || "Failed to generate summary"
-                }
-              });
-              
-              console.log(`✅ Processed commit: ${commit.commitHash.substring(0, 8)}`);
-            } catch (error) {
-              console.error(`❌ Error processing commit ${commit.commitHash}:`, error);
-              // Create a basic record even if processing fails
-              await db.commit.create({
-                data: {
-                  projectId,
-                  commitHash: commit.commitHash,
-                  commitMessage: commit.commitMessage,
-                  commitAuthorName: commit.commitAuthorName,
-                  commitAuthorAvatar: commit.commitAuthorAvatar,
-                  commitDate: commit.commitDate,
-                  summary: "Processing failed"
-                }
-              }).catch(() => {}); // Ignore if already exists
-            }
+          // Queue all commits in this wave to start at the same time
+          for (let i = 0; i < waveCommits.length; i++) {
+            const commit = waveCommits[i];
+            const globalIndex = startIndex + i;
+            
+            await inngest.send({
+              name: "project.commit.process.requested",
+              data: {
+                projectId,
+                commit,
+                githubUrl: project.githubUrl,
+                commitIndex: globalIndex,
+                totalCommits: unprocessedCommits.length,
+                waveIndex,
+                totalWaves,
+                // All commits in the same wave start together
+                delaySeconds: waveIndex * WAVE_DELAY
+              }
+            });
           }
-          
-          return { processedCommits: commitBatch.length };
-        });
-        
-        // Small delay between commit batches
-        if (i < commitBatches - 1) {
-          await step.sleep("commit-batch-delay", "1s");
         }
-      }
+        
+        const estimatedTime = totalWaves * WAVE_DELAY;
+        console.log(`📊 Queued ${unprocessedCommits.length} commits in ${totalWaves} waves. Estimated completion: ${estimatedTime} seconds`);
+        
+        return { 
+          queuedCommits: unprocessedCommits.length,
+          githubUrl: project.githubUrl,
+          waves: totalWaves,
+          estimatedTimeSeconds: estimatedTime
+        };
+      });
 
       // Step 4: Deduct credits (< 5 seconds)
       await step.run("deduct-credits", async () => {
@@ -243,6 +214,8 @@ export const processProjectCreation = inngest.createFunction(
       });
 
       // Step 5: Mark as completed (< 5 seconds)
+      // Note: We mark as completed even though commits may still be processing
+      // The commits will be processed asynchronously in the background
       await step.run("mark-completed", async () => {
         return await db.project.update({
           where: { id: projectId },
@@ -250,7 +223,7 @@ export const processProjectCreation = inngest.createFunction(
         });
       });
 
-      console.log(`✅ Project ${projectId} fully processed!`);
+      console.log(`✅ Project ${projectId} fully processed! Commits are being processed in background.`);
       return { success: true, projectId, indexedFiles: docs.length };
 
     } catch (error) {
@@ -268,132 +241,168 @@ export const processProjectCreation = inngest.createFunction(
   }
 );
 
-// Alternative: Even more granular file processing
-export const processProjectCreationUltraSafe = inngest.createFunction(
-  { 
-    id: "aetheria-process-project-creation-ultra-safe",
-    name: "Aetheria: Ultra-Safe Project Creation",
-    retries: 1,
+// NEW: Separate function to process individual commits with wave processing
+export const processSingleCommit = inngest.createFunction(
+  {
+    id: "aetheria-process-single-commit",
+    name: "Process Single Commit",
+    retries: 2, // Allow retries for failed commits
     concurrency: {
-      limit: 2,
-      key: "event.data.userId",
-    },
+      limit: 5, // Increased from 3 to 5 since we're using waves
+      key: "global" // Global concurrency limit for Gemini API protection
+    }
   },
-  { event: "project.creation.requested.ultra-safe" },
+  { event: "project.commit.process.requested" },
   async ({ event, step }) => {
-    const { projectId, githubUrl, githubToken, userId, fileCount } = event.data;
+    const { 
+      projectId, 
+      commit, 
+      githubUrl, 
+      commitIndex, 
+      totalCommits, 
+      waveIndex,
+      totalWaves,
+      delaySeconds 
+    } = event.data;
 
     try {
-      // Step 1: Load and queue individual files
-      const docs = await step.run("load-and-queue-files", async () => {
-        const docs = await loadGithubRepo(githubUrl, githubToken);
-        
-        // Queue each file for individual processing
-        for (let i = 0; i < docs.length; i++) {
-          await inngest.send({
-            name: "project.file.process.requested",
-            data: {
+      // Step 1: Wave delay (all commits in wave start together after this delay)
+      if (delaySeconds && delaySeconds > 0) {
+        await step.sleep("wave-delay", `${delaySeconds}s`);
+      }
+
+      // Step 2: Small random delay within the wave to avoid exact simultaneity
+      const randomDelay = Math.floor(Math.random() * 3000); // 0-3 seconds
+      if (randomDelay > 0) {
+        await step.sleep("random-delay", `${randomDelay}ms`);
+      }
+
+      // Step 3: Process the individual commit
+      const result = await step.run("process-commit", async () => {
+        try {
+          console.log(`🌊 Wave ${waveIndex + 1}/${totalWaves} - Processing commit ${commitIndex + 1}/${totalCommits}: ${commit.commitHash.substring(0, 8)}`);
+          
+          // Check if commit already exists (in case of retry)
+          const existingCommit = await db.commit.findFirst({
+            where: {
               projectId,
-              fileIndex: i,
-              fileName: docs[i].metadata.source,
-              fileContent: docs[i].pageContent,
-              totalFiles: docs.length
+              commitHash: commit.commitHash
             }
           });
+
+          if (existingCommit) {
+            console.log(`Commit ${commit.commitHash.substring(0, 8)} already processed, skipping`);
+            return { 
+              success: true, 
+              skipped: true, 
+              commitHash: commit.commitHash 
+            };
+          }
+
+          // Get commit diff with timeout
+          const axios = (await import("axios")).default;
+          
+          let diffData;
+          try {
+            const { data } = await axios.get(
+              `${githubUrl}/commit/${commit.commitHash}.diff`, 
+              { 
+                timeout: 15000, // 15 second timeout
+                headers: {
+                  'Accept': 'application/vnd.github.v3.diff'
+                }
+              }
+            );
+            diffData = data;
+          } catch (diffError) {
+            console.error(`Error fetching diff for commit ${commit.commitHash}:`, diffError);
+            diffData = "Unable to fetch commit diff";
+          }
+          
+          // The Gemini API call now has built-in rate limiting and delays
+          const { aisummariseCommit } = await import("@/lib/gemini");
+          let summary;
+          
+          try {
+            summary = await aisummariseCommit(diffData);
+            if (!summary || summary.trim().length === 0) {
+              summary = `Commit containing changes to ${commit.commitMessage || 'multiple files'}`;
+            }
+          } catch (summaryError) {
+            console.error(`Error summarizing commit ${commit.commitHash}:`, summaryError);
+            summary = `Commit: ${commit.commitMessage || 'Changes to codebase'}`;
+          }
+          
+          // Save to database
+          const savedCommit = await db.commit.create({
+            data: {
+              projectId,
+              commitHash: commit.commitHash,
+              commitMessage: commit.commitMessage,
+              commitAuthorName: commit.commitAuthorName,
+              commitAuthorAvatar: commit.commitAuthorAvatar,
+              commitDate: commit.commitDate,
+              summary: summary || "Failed to generate summary"
+            }
+          });
+          
+          console.log(`✅ Wave ${waveIndex + 1} - Successfully processed commit: ${commit.commitHash.substring(0, 8)}`);
+          
+          return { 
+            success: true, 
+            skipped: false, 
+            commitHash: commit.commitHash,
+            savedCommitId: savedCommit.id,
+            waveIndex
+          };
+          
+        } catch (error) {
+          console.error(`❌ Wave ${waveIndex + 1} - Error processing commit ${commit.commitHash}:`, error);
+          
+          // Create a basic record even if processing fails
+          try {
+            const fallbackCommit = await db.commit.create({
+              data: {
+                projectId,
+                commitHash: commit.commitHash,
+                commitMessage: commit.commitMessage,
+                commitAuthorName: commit.commitAuthorName,
+                commitAuthorAvatar: commit.commitAuthorAvatar,
+                commitDate: commit.commitDate,
+                summary: `Processing failed: ${error.message?.substring(0, 100) || 'Unknown error'}`
+              }
+            });
+            
+            return { 
+              success: false, 
+              error: error.message, 
+              commitHash: commit.commitHash,
+              fallbackCommitId: fallbackCommit.id,
+              waveIndex
+            };
+          } catch (dbError) {
+            // If even the fallback fails, just return the error
+            console.error(`Failed to create fallback commit record:`, dbError);
+            return { 
+              success: false, 
+              error: error.message, 
+              commitHash: commit.commitHash,
+              waveIndex
+            };
+          }
         }
-        
-        return { totalFiles: docs.length };
       });
 
-      // The individual file processing would be handled by separate functions
-      // that process ONE file at a time, guaranteeing < 60 second execution
-      
-      return { success: true, queuedFiles: docs.totalFiles };
-      
+      return result;
+
     } catch (error) {
-      console.error(`Error queuing project files:`, error);
+      console.error(`Failed to process commit ${commit.commitHash}:`, error);
       throw error;
     }
   }
 );
 
-// Separate function to process individual files (guaranteed < 60 seconds)
-export const processSingleFile = inngest.createFunction(
-  {
-    id: "aetheria-process-single-file",
-    name: "Process Single File",
-    concurrency: {
-      limit: 5, // Process up to 5 files simultaneously
-      key: "event.data.projectId"
-    }
-  },
-  { event: "project.file.process.requested" },
-  async ({ event, step }) => {
-    const { projectId, fileIndex, fileName, fileContent, totalFiles } = event.data;
-
-    await step.run("process-single-file", async () => {
-      try {
-        // Create document object
-        const doc = {
-          pageContent: fileContent,
-          metadata: { source: fileName }
-        };
-
-        // Process single file (should be < 45 seconds)
-        const summary = await summariseCode(doc);
-        if (!summary || summary.trim() === "") {
-          console.warn(`Empty summary for ${fileName}, skipping`);
-          return;
-        }
-        
-        const embedding = await generateEmbedding(summary);
-        
-        // Save to database
-        const sourceCodeEmbedding = await db.sourceCodeEmbedding.create({
-          data: {
-            summary,
-            sourceCode: JSON.stringify(fileContent),
-            fileName,
-            projectId,
-          }
-        });
-
-        await db.$executeRaw`
-          UPDATE "SourceCodeEmbedding"
-          SET "summaryEmbedding" = ${embedding}::vector
-          WHERE "id" = ${sourceCodeEmbedding.id}
-        `;
-
-        // Update progress
-        const updatedProject = await db.project.update({
-          where: { id: projectId },
-          data: { 
-            processedFiles: { increment: 1 }
-          },
-          select: { processedFiles: true }
-        });
-
-        console.log(`✅ Processed file ${fileIndex + 1}/${totalFiles}: ${fileName}`);
-        
-        // Check if this was the last file
-        if (updatedProject.processedFiles >= totalFiles) {
-          // Trigger next phase (commit processing)
-          await inngest.send({
-            name: "project.files.completed",
-            data: { projectId }
-          });
-        }
-
-        return { success: true, fileName };
-      } catch (error) {
-        console.error(`Error processing file ${fileName}:`, error);
-        return { success: false, fileName, error: error.message };
-      }
-    });
-  }
-);
-
-// MEETING PROCESSING with concurrency per user
+// MEETING PROCESSING (unchanged)
 export const processMeetingFunction = inngest.createFunction(
   {
     id: "aetheria-process-meeting",
@@ -605,97 +614,9 @@ export const processMeetingFunction = inngest.createFunction(
   }
 );
 
-// Helper function for processing commits in smaller batches with concurrency
-async function pollCommitsInBatches(projectId: string) {
-  const project = await db.project.findUnique({
-    where: { id: projectId },
-    select: { githubUrl: true }
-  });
-  
-  if (!project?.githubUrl) {
-    throw new Error(`Project ${projectId} has no GitHub URL`);
-  }
-  
-  const { getCommitHashes } = await import("@/lib/github");
-  const commitHashes = await getCommitHashes(project.githubUrl);
-  
-  // Filter unprocessed commits
-  const processedCommits = await db.commit.findMany({
-    where: { projectId },
-    select: { commitHash: true }
-  });
-  
-  const processedHashes = new Set(processedCommits.map(commit => commit.commitHash));
-  const unprocessedCommits = commitHashes.filter(commit => !processedHashes.has(commit.commitHash));
-  
-  if (unprocessedCommits.length === 0) {
-    return { count: 0 };
-  }
-  
-  // Process commits in concurrent batches
-  const COMMIT_BATCH_SIZE = 3; // Larger batches with concurrency
-  const CONCURRENT_COMMIT_BATCHES = 2; // Process 2 batches of commits simultaneously
-  let totalProcessed = 0;
-  
-  for (let i = 0; i < unprocessedCommits.length; i += (COMMIT_BATCH_SIZE * CONCURRENT_COMMIT_BATCHES)) {
-    const batchPromises = [];
-    
-    for (let j = 0; j < CONCURRENT_COMMIT_BATCHES; j++) {
-      const startIndex = i + (j * COMMIT_BATCH_SIZE);
-      const endIndex = Math.min(startIndex + COMMIT_BATCH_SIZE, unprocessedCommits.length);
-      
-      if (startIndex < unprocessedCommits.length) {
-        const batch = unprocessedCommits.slice(startIndex, endIndex);
-        
-        batchPromises.push(
-          Promise.allSettled(batch.map(async (commit) => {
-            try {
-              const { aisummariseCommit } = await import("@/lib/gemini");
-              const axios = (await import("axios")).default;
-              
-              // Get commit diff with timeout
-              const { data } = await axios.get(`${project.githubUrl}/commit/${commit.commitHash}.diff`, {
-                timeout: 10000
-              });
-              
-              const summary = await aisummariseCommit(data);
-              
-              return await db.commit.create({
-                data: {
-                  projectId,
-                  commitHash: commit.commitHash,
-                  commitMessage: commit.commitMessage,
-                  commitAuthorName: commit.commitAuthorName,
-                  commitAuthorAvatar: commit.commitAuthorAvatar,
-                  commitDate: commit.commitDate,
-                  summary: summary || "Failed to generate summary"
-                }
-              });
-            } catch (error) {
-              console.error(`Error processing commit ${commit.commitHash}:`, error);
-              return null;
-            }
-          }))
-        );
-      }
-    }
-    
-    // Wait for all concurrent batches to complete
-    const batchResults = await Promise.all(batchPromises);
-    
-    // Count successful results
-    batchResults.forEach(batchResult => {
-      const successfulResults = batchResult
-        .filter(result => result.status === 'fulfilled' && result.value !== null)
-        .length;
-      totalProcessed += successfulResults;
-    });
-    
-    // Small delay between concurrent batch groups
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  
-  return { count: totalProcessed };
-}
-
-export const functions = [processProjectCreation, processMeetingFunction];
+// Export all functions
+export const functions = [
+  processProjectCreation, 
+  processSingleCommit,
+  processMeetingFunction
+];
