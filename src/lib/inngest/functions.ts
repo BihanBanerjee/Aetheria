@@ -1,9 +1,8 @@
 // src/lib/inngest/functions.ts
 import { inngest } from "./client";
-import { indexGithubRepo, loadGithubRepo } from "@/lib/github-loader";
-import { pollCommits } from "@/lib/github";
+import { loadGithubRepo } from "@/lib/github-loader";
 import { summariseCode, generateEmbedding } from "@/lib/gemini";
-import { checkTranscriptionStatus, processMeeting, retrieveTranscriptionResults, submitMeetingForProcessing } from "@/lib/assembly";
+import { checkTranscriptionStatus, retrieveTranscriptionResults, submitMeetingForProcessing } from "@/lib/assembly";
 import { db } from "@/server/db";
 import type { CommitProcessingStatus } from "@prisma/client";
 
@@ -439,7 +438,7 @@ export const processSingleCommit = inngest.createFunction(
 );
 
 
-// MEETING PROCESSING (unchanged)
+// MEETING PROCESSING 
 export const processMeetingFunction = inngest.createFunction(
   {
     id: "aetheria-process-meeting",
