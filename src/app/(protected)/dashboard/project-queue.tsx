@@ -51,7 +51,7 @@ const getStatusConfig = (status: ProjectStatus) => {
       return {
         icon: <CheckCircle className="h-4 w-4" />,
         color: 'bg-green-500/20 text-green-200 border-green-500/30',
-        label: 'Completed',
+        label: 'Ready - Processing Commits',
         progress: 100
       };
     case 'FAILED':
