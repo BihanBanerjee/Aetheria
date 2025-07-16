@@ -25,7 +25,7 @@ export const processMeetingFunction = inngest.createFunction(
   },
   { event: EVENT_NAMES.MEETING_PROCESSING_REQUESTED },
   async ({ event, step }): Promise<MeetingProcessingResult> => {
-    const { meetingUrl, meetingId, projectId, userId }: MeetingProcessingEventData = event.data;
+    const { meetingUrl, meetingId, userId }: MeetingProcessingEventData = event.data;
 
     try {
       console.log(`Starting to process meeting ${meetingId} for user ${userId}`);
@@ -50,7 +50,7 @@ export const processMeetingFunction = inngest.createFunction(
       });
 
       // Step 3: Poll for transcription completion
-      const transcriptionStatus = await step.run("poll-transcription", async () => {
+      await step.run("poll-transcription", async () => {
         return await transcriptionSteps.pollTranscriptionStatus(transcriptionJob.transcriptId);
       });
 

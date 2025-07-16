@@ -6,23 +6,12 @@ import { motion } from 'framer-motion';
 import { Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GlassmorphicCard } from '@/components/ui/glassmorphic-card';
+import type { Question } from '../../types';
 
 // Types
 interface User {
-  imageUrl: string;
-  firstName?: string;
-}
-
-interface Question {
-  id: string;
-  question: string;
-  answer: string;
-  createdAt: string;
-  user: User;
-  filesReferences?: {
-    fileName: string;
-    sourceCode: string;
-  }[];
+  imageUrl: string | null;
+  firstName?: string | null;
 }
 
 interface QuestionCardProps {

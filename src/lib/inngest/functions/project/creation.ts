@@ -11,7 +11,6 @@ import { statusUpdateSteps } from "../../steps/common/status-updates";
 import { fileProcessingSteps } from "../../steps/project/file-processing";
 import { commitQueueingSteps } from "../../steps/project/commit-queueing";
 import { creditDeductionSteps } from "../../steps/project/credit-deduction";
-import { batchProcessingUtils } from "../../utils/batch-processing";
 import { projectDatabase } from "../../utils/database";
 import type { ProjectCreationEventData, ProjectProcessingResult } from "../../types";
 
@@ -64,7 +63,7 @@ export const processProjectCreation = inngest.createFunction(
       });
 
       // Step 3: Queue commits for processing
-      const queueResult = await step.run("queue-commit-processing", async () => {
+      await step.run("queue-commit-processing", async () => {
         await statusUpdateSteps.updateProjectStatus(projectId, 'POLLING_COMMITS');
 
         const project = await projectDatabase.getProject(projectId);

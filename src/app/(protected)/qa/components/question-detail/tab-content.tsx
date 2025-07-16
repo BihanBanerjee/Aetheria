@@ -6,15 +6,9 @@ import { FileText, Code } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import CodeReferenceWrapper from '../code-reference/code-reference-wrapper';
 import { cleanSourceCode } from '../../../../../utils/code/language-utils';
+import type { Question } from '../../types';
 
-// Types
-interface Question {
-  answer: string;
-  filesReferences?: {
-    fileName: string;
-    sourceCode: string;
-  }[];
-}
+// Types are now imported from shared types file
 
 interface AnswerTabContentProps {
   question: Question;
@@ -77,7 +71,7 @@ export const getActiveTabContent = (
   activeTab: string,
   question: Question,
   codeWrapperRef: React.RefObject<{ activeFileIndex: number }>
-): JSX.Element => {
+): React.ReactElement => {
   if (activeTab === 'answer') {
     return <AnswerTabContent question={question} />;
   } else {
@@ -93,7 +87,7 @@ export const getClipboardContent = (
 ): { content: string; filename?: string } => {
   if (activeTab === 'answer') {
     return { content: question.answer };
-  } else if (activeTab === 'code' && question.filesReferences?.length > 0) {
+  } else if (activeTab === 'code' && question.filesReferences && question.filesReferences.length > 0) {
     const activeFileIndex = codeWrapperRef.activeFileIndex;
     const activeFile = question.filesReferences[activeFileIndex];
     

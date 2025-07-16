@@ -102,7 +102,7 @@ const CodeReferenceWrapper = React.forwardRef<{ activeFileIndex: number }, CodeR
           const language = getLanguageFromFileName(file.fileName);
           
           // Check file size and apply optimization for large files
-          const isLargeFile = file.sourceCode && file.sourceCode.length > 10000;
+          const isLargeFile = !!(file.sourceCode && file.sourceCode.length > 10000);
           
           return (
             <div key={file.fileName} className="h-full flex flex-col">

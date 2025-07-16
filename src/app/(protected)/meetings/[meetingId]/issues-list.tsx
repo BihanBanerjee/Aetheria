@@ -88,7 +88,7 @@ function IssueCard({ issue }: { issue: NonNullable<RouterOutputs["project"]["get
                     
                     <div className="glassmorphism border border-white/20 p-4 mt-2 bg-indigo-900/20">
                         <p className="italic text-white leading-relaxed">
-                            "{issue.summary}"
+                            &quot;{issue.summary}&quot;
                         </p>
                     </div>
                 </DialogContent>

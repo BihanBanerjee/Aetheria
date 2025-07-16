@@ -1,8 +1,8 @@
 // Common types used throughout the QA components
 
 export interface User {
-  imageUrl: string;
-  firstName?: string;
+  imageUrl: string | null;
+  firstName?: string | null;
 }
 
 export interface FileReference {
@@ -14,7 +14,7 @@ export interface Question {
   id: string;
   question: string;
   answer: string;
-  createdAt: string;
+  createdAt: Date;
   user: User;
-  filesReferences?: FileReference[];
+  filesReferences?: FileReference[] | null;
 }

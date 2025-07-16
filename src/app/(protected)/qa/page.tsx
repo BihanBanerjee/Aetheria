@@ -77,7 +77,7 @@ const QAPage: React.FC = () => {
         {questions?.map((question, index) => (
           <QuestionCard 
             key={question.id}
-            question={question}
+            question={question as any}
             index={index}
             onClick={() => openQuestion(index)}
           />
@@ -88,7 +88,7 @@ const QAPage: React.FC = () => {
       <AnimatePresence>
         {selectedQuestion && (
           <QuestionDetail 
-            question={selectedQuestion} 
+            question={selectedQuestion as any} 
             onClose={closeQuestion} 
           />
         )}

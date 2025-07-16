@@ -6,22 +6,12 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, Clock, Copy, X, FileText, Code } from 'lucide-react';
 import { toast } from 'sonner';
 import { getActiveTabContent, getClipboardContent } from './tab-content';
+import type { Question } from '../../types';
 
 // Types
 interface User {
-  imageUrl: string;
-  firstName?: string;
-}
-
-interface Question {
-  question: string;
-  answer: string;
-  createdAt: string;
-  user: User;
-  filesReferences?: {
-    fileName: string;
-    sourceCode: string;
-  }[];
+  imageUrl: string | null;
+  firstName?: string | null;
 }
 
 interface QuestionDetailProps {
