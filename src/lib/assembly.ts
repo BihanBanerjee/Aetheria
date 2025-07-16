@@ -64,9 +64,25 @@ export const checkTranscriptionStatus = async (transcriptId: string) => {
         
         console.log(`Transcription ${transcriptId} status: ${transcript.status}`);
         
+        // Map AssemblyAI statuses to our expected TranscriptionStatus
+        let mappedStatus: 'processing' | 'completed' | 'error';
+        switch (transcript.status) {
+            case 'completed':
+                mappedStatus = 'completed';
+                break;
+            case 'error':
+                mappedStatus = 'error';
+                break;
+            case 'queued':
+            case 'processing':
+            default:
+                mappedStatus = 'processing';
+                break;
+        }
+        
         return {
             id: transcript.id,
-            status: transcript.status,
+            status: mappedStatus,
             error: transcript.error
         };
     } catch (error) {
